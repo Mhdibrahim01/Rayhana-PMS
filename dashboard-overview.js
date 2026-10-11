@@ -510,18 +510,6 @@
     App.DOM.overviewEmpty.style.display = 'none';
     const e = App.Helpers.escapeHtml;
     const today = String(App.State.businessDate || App.Helpers.getLocalDateString());
-    const actualArrivalDate = reservation => {
-      const timestamp = reservation.actual_check_in_at || reservation.created_at;
-      if (!timestamp) return String(reservation.check_in_date || '-').slice(0, 10);
-      const parsed = App.Helpers.parseStoredTimestamp(timestamp);
-      if (!parsed || Number.isNaN(parsed.getTime())) return String(reservation.check_in_date || '-').slice(0, 10);
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: App.Helpers.getHotelTimezone(),
-        year: 'numeric', month: '2-digit', day: '2-digit'
-      }).formatToParts(parsed);
-      const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
-      return `${values.year}-${values.month}-${values.day}`;
-    };
     const icons = {
       preview: '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>',
       checkout: '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>',
@@ -535,7 +523,7 @@
     App.DOM.overviewTableBody.innerHTML = recent.map(r => {
       const isContract = r.booking_type === 'عقد مفتوح';
       const isEarlyMorningCheckin = Number(r.is_early_checkin) === 1;
-      const arrivalDate = isEarlyMorningCheckin ? actualArrivalDate(r) : String(r.check_in_date || '-').slice(0, 10);
+      const arrivalDate = isEarlyMorningCheckin ? getActualArrivalCalendarDate(r) : String(r.check_in_date || '-').slice(0, 10);
       const storedTotal = Number(r.total_price || 0);
       const paid = Number((r.ledger_paid_amount ?? r.paid_amount) || 0);
       const rate = Number(r.custom_nightly_price || r.price_per_night || 0);
@@ -1089,6 +1077,20 @@
     return westernPreviewDigits(value || '').slice(0, 10);
   }
 
+  function getActualArrivalCalendarDate(reservation) {
+    const fallbackDate = roomDetailsDate(reservation.check_in_date) || '-';
+    const timestamp = reservation.actual_check_in_at || reservation.created_at;
+    if (!timestamp) return fallbackDate;
+    const parsed = App.Helpers.parseStoredTimestamp(timestamp);
+    if (!parsed || Number.isNaN(parsed.getTime())) return fallbackDate;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: App.Helpers.getHotelTimezone(),
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(parsed);
+    const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  }
+
   function roomDetailsMoney(value) {
     return `${Number(value || 0).toLocaleString('ar-SA-u-nu-latn')} \u0631.\u0633`;
   }
@@ -1132,6 +1134,8 @@
       ? (Number(r.monthly_rate_snapshot) || (dailyRate * 30))
       : dailyRate;
     const checkIn = roomDetailsDate(r.check_in_date);
+    const isEarlyMorningCheckin = Number(r.is_early_checkin) === 1;
+    const displayedCheckIn = isEarlyMorningCheckin ? getActualArrivalCalendarDate(r) : checkIn;
     const checkout = roomDetailsDate(r.check_out_date);
     const today = String(App.State.businessDate || App.Helpers.getLocalDateString());
     const isOverdue = r.status === 'مؤكد' && !isOpenContract && /^\d{4}-\d{2}-\d{2}$/.test(checkout) && checkout < today;
@@ -1166,7 +1170,7 @@
         </section>
         <section class="reservation-preview-section modal-section-card room-details-card room-details-stay-card">
           <div class="reservation-preview-section-title modal-section-card__header room-details-card-heading"><span class="reservation-preview-title-icon">\u25a6</span><strong>\u062a\u0641\u0627\u0635\u064a\u0644 \u0627\u0644\u0625\u0642\u0627\u0645\u0629</strong></div>
-          <div class="room-details-stay-fields">${roomDetailsField('\u0646\u0648\u0639 \u0627\u0644\u062d\u062c\u0632', r.booking_type || '\u062d\u062c\u0632 \u064a\u0648\u0645\u064a')}${roomDetailsField('\u0631\u0642\u0645 \u0627\u0644\u0633\u0646\u062f', formatReservationNumber(r), '', 'room-details-receipt-number')}${roomDetailsField('\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0648\u0635\u0648\u0644', roomDetailsDate(r.check_in_date) || '\u063a\u064a\u0631 \u0645\u062d\u062f\u062f')}${roomDetailsField('\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629', isOpenContract ? '\u0639\u0642\u062f \u0645\u0641\u062a\u0648\u062d' : (roomDetailsDate(r.check_out_date) || '\u063a\u064a\u0631 \u0645\u062d\u062f\u062f'))}${roomDetailsField(r.booking_type === '\u062d\u062c\u0632 \u0634\u0647\u0631\u064a' ? '\u0627\u0644\u0633\u0639\u0631 \u0627\u0644\u0634\u0647\u0631\u064a' : '\u0633\u0639\u0631 \u0627\u0644\u0644\u064a\u0644\u0629', roomDetailsMoney(previewRate), Number(r.discount_amount) > 0 ? `\u0627\u0644\u062e\u0635\u0645: ${roomDetailsMoney(r.discount_amount)}` : '')}${roomDetailsField('\u0639\u062f\u062f \u0627\u0644\u0644\u064a\u0627\u0644\u064a', stayNights > 0 ? `${stayNights} ${stayNights === 1 ? '\u0644\u064a\u0644\u0629' : '\u0644\u064a\u0627\u0644\u064d'}${isOverdue && overdueNights > 0 ? ` (\u0645\u062a\u0623\u062e\u0631 ${overdueNights} \u0644\u064a\u0627\u0644\u064d)` : ''}` : '\u063a\u064a\u0631 \u0645\u062a\u0648\u0641\u0631')}</div>
+          <div class="room-details-stay-fields">${roomDetailsField('\u0646\u0648\u0639 \u0627\u0644\u062d\u062c\u0632', r.booking_type || '\u062d\u062c\u0632 \u064a\u0648\u0645\u064a')}${roomDetailsField('\u0631\u0642\u0645 \u0627\u0644\u0633\u0646\u062f', formatReservationNumber(r), '', 'room-details-receipt-number')}${roomDetailsField(isEarlyMorningCheckin ? '\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0648\u0635\u0648\u0644 \u0627\u0644\u0641\u0639\u0644\u064a' : '\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0648\u0635\u0648\u0644', displayedCheckIn || '\u063a\u064a\u0631 \u0645\u062d\u062f\u062f')}${roomDetailsField('\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u063a\u0627\u062f\u0631\u0629', isOpenContract ? '\u0639\u0642\u062f \u0645\u0641\u062a\u0648\u062d' : (roomDetailsDate(r.check_out_date) || '\u063a\u064a\u0631 \u0645\u062d\u062f\u062f'))}${roomDetailsField(r.booking_type === '\u062d\u062c\u0632 \u0634\u0647\u0631\u064a' ? '\u0627\u0644\u0633\u0639\u0631 \u0627\u0644\u0634\u0647\u0631\u064a' : '\u0633\u0639\u0631 \u0627\u0644\u0644\u064a\u0644\u0629', roomDetailsMoney(previewRate), Number(r.discount_amount) > 0 ? `\u0627\u0644\u062e\u0635\u0645: ${roomDetailsMoney(r.discount_amount)}` : '')}${roomDetailsField('\u0639\u062f\u062f \u0627\u0644\u0644\u064a\u0627\u0644\u064a', stayNights > 0 ? `${stayNights} ${stayNights === 1 ? '\u0644\u064a\u0644\u0629' : '\u0644\u064a\u0627\u0644\u064d'}${isOverdue && overdueNights > 0 ? ` (\u0645\u062a\u0623\u062e\u0631 ${overdueNights} \u0644\u064a\u0627\u0644\u064d)` : ''}` : '\u063a\u064a\u0631 \u0645\u062a\u0648\u0641\u0631')}</div>
           ${(Number(r.discount_amount) > 0 || isOpenContract || r.discount_reason) ? `<div class="room-details-note"><strong>\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0648\u062a\u0639\u0644\u064a\u0645\u0627\u062a \u0627\u0644\u0625\u0642\u0627\u0645\u0629:</strong> ${r.discount_reason ? App.Helpers.escapeHtml(westernPreviewDigits(r.discount_reason)) : (isOpenContract ? '\u0639\u0642\u062f \u0645\u0641\u062a\u0648\u062d' : '\u062e\u0635\u0645 \u0645\u0633\u062c\u0644 \u0639\u0644\u0649 \u0627\u0644\u0625\u0642\u0627\u0645\u0629')}</div>` : ''}
         </section>
         <section class="reservation-preview-section modal-section-card room-details-card room-details-financial-card">
