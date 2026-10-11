@@ -207,6 +207,19 @@
   function showToast(message, type = "info") { return App.Helpers.showToast(message, type); }
   function formatArabicDateRange(startDateStr, endDateStr) { return App.Helpers.formatArabicDateRange(startDateStr, endDateStr); }
   function formatArabicDateTime(dateString, includeTime = true) { return App.Helpers.formatArabicDateTime(dateString, includeTime); }
+  function getActualCheckinCalendarDate(reservation) {
+    const timestamp = reservation.actual_check_in_at || reservation.created_at;
+    const fallbackDate = reservation.check_in_date || '-';
+    if (!timestamp) return fallbackDate;
+    const parsed = App.Helpers.parseStoredTimestamp(timestamp);
+    if (!parsed || Number.isNaN(parsed.getTime())) return fallbackDate;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: App.Helpers.getHotelTimezone(),
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(parsed);
+    const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  }
   function escapeHtml(str) { return App.Helpers.escapeHtml(str); }
   function showConfirmDialog(opts) { return App.Helpers.showConfirmDialog(opts); }
   function showPromptDialog(opts) { return App.Helpers.showPromptDialog(opts); }
@@ -1637,6 +1650,9 @@
     // once to avoid hundreds of costly individual DOM reflows (layout thrashing).
     const rowsHtml = filtered.map(r => {
       const isConfirmed = r.status === 'مؤكد';
+      const isEarlyMorningCheckin = Number(r.is_early_checkin) === 1;
+      const arrivalDisplayDate = isEarlyMorningCheckin ? getActualCheckinCalendarDate(r) : (r.check_in_date || '-');
+      const arrivalDisplayTime = isEarlyMorningCheckin ? (r.actual_checkin_time || r.booking_time) : r.booking_time;
       const hotelBizDate = getOperationalBusinessDate() || getLocalDateString();
       const isArrivalDate = r.check_in_date ? (r.check_in_date >= hotelBizDate) : false;
       const hasStarted = r.check_in_date ? !isArrivalDate : false;
@@ -1716,9 +1732,9 @@
           </td>
           <td class="res-cell-dates">
             <div class="res-date-line">
-              <span class="res-date-label">وصول:</span>
-              <span class="res-date-val"><bdi dir="ltr">${escapeHtml(r.check_in_date || '-')}</bdi></span>
-              ${r.booking_time ? `<span class="res-time-val">${escapeHtml(r.booking_time)}</span>` : ''}
+              <span class="res-date-label">${isEarlyMorningCheckin ? 'وصول فعلي:' : 'وصول:'}</span>
+              <span class="res-date-val"><bdi dir="ltr">${escapeHtml(arrivalDisplayDate)}</bdi></span>
+              ${arrivalDisplayTime ? `<span class="res-time-val">${escapeHtml(arrivalDisplayTime)}</span>` : ''}
             </div>
             <div class="res-date-line">
               <span class="res-date-label">مغادرة:</span>
