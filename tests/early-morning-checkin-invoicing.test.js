@@ -31,6 +31,13 @@ test('early morning check-in invoicing and calendar date display', async t => {
       reservationsContent.includes('getActualCheckinCalendarDate(r)') && reservationsContent.includes("'وصول فعلي:'"),
       'Reservation list must show the actual hotel-local arrival date for early morning check-ins'
     );
+
+    const overviewPath = path.join(__dirname, '..', 'dashboard-overview.js');
+    const overviewContent = fs.readFileSync(overviewPath, 'utf8');
+    assert.ok(
+      overviewContent.includes('actualArrivalDate(r)') && overviewContent.includes("isEarlyMorningCheckin ? 'فعلي' : 'من'"),
+      'Overview active reservations must show the actual arrival date for early morning check-ins'
+    );
   });
 
   await withSafeDatabase(async (db, connection) => {
