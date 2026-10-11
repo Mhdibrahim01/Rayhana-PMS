@@ -1527,6 +1527,16 @@
         hour: '2-digit',
         minute: '2-digit'
       });
+      const formatActualCheckinDateTime = timestamp => {
+        const parsed = window.DashboardApp?.Helpers?.parseStoredTimestamp?.(timestamp);
+        if (!parsed || Number.isNaN(parsed.getTime())) return '';
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: window.DashboardApp?.Helpers?.getHotelTimezone ? window.DashboardApp.Helpers.getHotelTimezone() : 'Asia/Riyadh',
+          year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+        }).formatToParts(parsed);
+        const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+        return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}`;
+      };
       const isMultiDay = Boolean(rep.isRange || (rep.startDate && rep.endDate && rep.startDate !== rep.endDate));
       const periodLabel = formatArabicDateRange(rep.startDate, rep.endDate);
 
@@ -1748,13 +1758,16 @@
                     const checkOut = t.check_out_date || '-';
                     const isSameDayStay = checkIn !== '-' && checkIn === checkOut;
                     const stayText = isSameDayStay ? `${escapeHtml(checkIn)} (نفس اليوم)` : `${escapeHtml(checkIn)} &rarr; ${escapeHtml(checkOut)}`;
+                    const actualCheckinDateTime = Number(t.is_early_checkin) === 1
+                      ? formatActualCheckinDateTime(t.actual_check_in_at || t.created_at)
+                      : '';
                     const isCancelledRow = t.status === 'ملغي';
                     return `
                     <tr style="border-bottom: 1px solid #e2e8f0; ${isCancelledRow ? 'background: #fff5f5; opacity: 0.88;' : ''}">
                       <td style="padding: 8px 10px; font-family: monospace; font-weight: 700;">#${t.id}</td>
                       <td style="padding: 8px 10px; font-weight: 700;">${escapeHtml(t.guest_name)}</td>
                       <td style="padding: 8px 10px;">غرفة ${escapeHtml(t.room_number)}</td>
-                      <td style="padding: 8px 10px; text-align: center; font-size: 0.78rem; direction: ltr;">${stayText}</td>
+                      <td style="padding: 8px 10px; text-align: center; font-size: 0.78rem; direction: ltr;">${stayText}${actualCheckinDateTime ? `<small style="display:block; margin-top:4px; color:#047831; direction:rtl;">الوصول الفعلي: <bdi dir="ltr">${escapeHtml(actualCheckinDateTime)}</bdi></small>` : ''}</td>
                       <td style="padding: 8px 10px; text-align: center;">${escapeHtml(t.payment_method || 'نقداً')}</td>
                       <td style="padding: 8px 10px; text-align: center; font-weight: 700; color: #05963d;">${parseFloat(t.paid_amount || 0).toLocaleString()} ر.س</td>
                       <td style="padding: 8px 10px; text-align: center; color: #701a75;">${parseFloat(t.deposit_ledger_balance || 0).toLocaleString()} ر.س</td>
