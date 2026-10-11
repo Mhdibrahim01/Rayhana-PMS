@@ -42,6 +42,11 @@ test('early morning check-in invoicing and calendar date display', async t => {
       overviewContent.includes('displayedCheckIn = isEarlyMorningCheckin ? getActualArrivalCalendarDate(r) : checkIn'),
       'Reservation preview must display actual arrival while retaining check_in_date for billing calculations'
     );
+
+    assert.ok(
+      content.includes('formatActualCheckinDateTime(t.actual_check_in_at || t.created_at)') && content.includes('الوصول الفعلي:'),
+      'Shift audit must show actual arrival separately from the billed stay interval'
+    );
   });
 
   await withSafeDatabase(async (db, connection) => {
