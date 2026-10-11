@@ -48,6 +48,7 @@ module.exports = {
   // guests
   getAllGuests: guests.getAllGuests,
   getGuestsPaginated: guests.getGuestsPaginated,
+  getGuestReservationHistory: guests.getGuestReservationHistory,
   addCustomer: guests.addCustomer,
   addGuest: guests.addGuest,
   updateGuest: guests.updateGuest,

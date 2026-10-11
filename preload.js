@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('api', {
   // Guests & Customers
   getAllGuests: (params) => ipcRenderer.invoke('guests:get-all', params),
   getGuestsPaginated: (params) => ipcRenderer.invoke('guests:get-paginated', params),
+  getGuestReservationHistory: (guestId) => ipcRenderer.invoke('guests:get-reservation-history', guestId),
   addCustomer: (customerData, requesterRole) => ipcRenderer.invoke('add-customer', { customerData, requesterRole }),
   searchGuest: (query) => ipcRenderer.invoke('guests:search', query),
   setGuestBanStatus: (data) => ipcRenderer.invoke('guests:set-ban-status', data),

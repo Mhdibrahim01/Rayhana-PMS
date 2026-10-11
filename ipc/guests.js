@@ -82,6 +82,17 @@ module.exports = function registerGuestsIpc(ipcMain, { db, session }) {
     }
   });
 
+  ipcMain.handle('guests:get-reservation-history', async (event, guestId) => {
+    const authError = requireSession();
+    if (authError) return authError;
+
+    try {
+      return { success: true, data: db.getGuestReservationHistory(guestId) };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
   const handleAddCustomer = async (event, arg1, arg2) => {
     let customerData = arg1;
     let requesterRole = arg2;
