@@ -24,6 +24,13 @@ test('early morning check-in invoicing and calendar date display', async t => {
       content.includes('تشمل مبيت الليلة السابقة - دخول فجر مبكر'),
       'Invoice must include explanatory note: (تشمل مبيت الليلة السابقة - دخول فجر مبكر)'
     );
+
+    const reservationsPath = path.join(__dirname, '..', 'dashboard-reservations.js');
+    const reservationsContent = fs.readFileSync(reservationsPath, 'utf8');
+    assert.ok(
+      reservationsContent.includes('getActualCheckinCalendarDate(r)') && reservationsContent.includes("'وصول فعلي:'"),
+      'Reservation list must show the actual hotel-local arrival date for early morning check-ins'
+    );
   });
 
   await withSafeDatabase(async (db, connection) => {
