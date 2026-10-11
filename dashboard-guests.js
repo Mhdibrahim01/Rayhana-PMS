@@ -413,7 +413,10 @@
     try {
       App.Helpers.showToast('جاري تحضير ملف Excel لكافة النزلاء...', 'info');
       const allRes = await window.api.getAllGuests();
-      const allGuestsList = (allRes && allRes.data) ? allRes.data : App.State.guestsCache;
+      if (!allRes?.success || !Array.isArray(allRes.data)) {
+        throw new Error(allRes?.error || 'تعذر تحميل قائمة النزلاء كاملة للتصدير.');
+      }
+      const allGuestsList = allRes.data;
 
       if (!allGuestsList || allGuestsList.length === 0) {
         App.Helpers.showToast('لا توجد بيانات نزلاء لتصديرها.', 'info');
@@ -425,8 +428,8 @@
         'اسم النزيل': g.name,
         'رقم الجوال': g.phone || '',
         'رقم الهوية / الجواز': g.id_number || '',
-        'عدد الإقامات': parseInt(g.total_stays, 10) || 0,
-        'إجمالي المدفوعات': parseFloat(g.total_spent) || 0,
+        'عدد الإقامات المكتملة': parseInt(g.total_stays, 10) || 0,
+        'المدفوع للإقامات المكتملة': parseFloat(g.total_spent) || 0,
         'تاريخ التسجيل': g.created_at
       }));
 

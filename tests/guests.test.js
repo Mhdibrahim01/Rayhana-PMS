@@ -92,5 +92,29 @@ test('guest validation, imports, bans, search, and pagination', async t => {
       assert.throws(() => db.getGuestReservationHistory('invalid'), /معرف النزيل غير صالح/);
       assertDatabaseIntegrity(connection, 'guest reservation history');
     });
+
+    await t.test('guest payment totals reflect ledger payments, not reservation prices', () => {
+      const room = addRoom('GUEST-PAID-TOTAL');
+      const reservationId = db.createReservation({
+        guestName: 'Guest Paid Total',
+        guestPhone: '0500000721',
+        guestIdNumber: '1000000721',
+        roomId: room.id,
+        checkInDate: '2026-04-01',
+        checkOutDate: '2026-04-03',
+        totalPrice: 500,
+        paidAmount: 125
+      }).reservationId;
+      connection.db.run("UPDATE reservations SET status = 'مكتمل' WHERE id = ?", [reservationId]);
+
+      const guest = connection.queryOne('SELECT id FROM guests WHERE phone = ?', ['0500000721']);
+      const allGuestsRow = db.getAllGuests().find(item => item.id === guest.id);
+      const pagedGuestRow = db.getGuestsPaginated({ search: 'Guest Paid Total' }).data[0];
+
+      assert.equal(allGuestsRow.total_stays, 1);
+      assert.equal(allGuestsRow.total_spent, 125);
+      assert.equal(pagedGuestRow.total_spent, 125);
+      assertDatabaseIntegrity(connection, 'guest payment total');
+    });
   });
 });

@@ -19,9 +19,17 @@ function getAllGuests() {
       g.is_banned,
       g.ban_reason,
       COUNT(CASE WHEN r.status = 'مكتمل' THEN r.id END) AS total_stays,
-      IFNULL(SUM(CASE WHEN r.status = 'مكتمل' THEN r.total_price ELSE 0 END), 0) AS total_spent
+      IFNULL(SUM(CASE
+        WHEN r.status = 'مكتمل' THEN COALESCE(p.total_amount, r.paid_amount, 0)
+        ELSE 0
+      END), 0) AS total_spent
     FROM guests g
     LEFT JOIN reservations r ON g.id = r.guest_id
+    LEFT JOIN (
+      SELECT reservation_id, SUM(amount) AS total_amount
+      FROM payments
+      GROUP BY reservation_id
+    ) p ON p.reservation_id = r.id
     GROUP BY g.id
     ORDER BY g.id DESC
   `;
@@ -76,9 +84,17 @@ function getGuestsPaginated({ page = 1, limit = 50, search = '', banFilter = 'al
       g.is_banned,
       g.ban_reason,
       COUNT(CASE WHEN r.status = 'مكتمل' THEN r.id END) AS total_stays,
-      IFNULL(SUM(CASE WHEN r.status = 'مكتمل' THEN r.total_price ELSE 0 END), 0) AS total_spent
+      IFNULL(SUM(CASE
+        WHEN r.status = 'مكتمل' THEN COALESCE(p.total_amount, r.paid_amount, 0)
+        ELSE 0
+      END), 0) AS total_spent
     FROM guests g
     LEFT JOIN reservations r ON g.id = r.guest_id
+    LEFT JOIN (
+      SELECT reservation_id, SUM(amount) AS total_amount
+      FROM payments
+      GROUP BY reservation_id
+    ) p ON p.reservation_id = r.id
     ${whereClause}
     GROUP BY g.id
     ORDER BY g.id DESC

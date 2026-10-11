@@ -374,7 +374,7 @@
       const transfer = Number(shiftSummary.transferTotal) || 0;
       const total = cash + card + transfer;
       revenueTotalEl.textContent = total.toLocaleString('en-US');
-      revenueBreakdownEl.textContent = `كاش: ${cash.toLocaleString('en-US')} | شبكة: ${(card + transfer).toLocaleString('en-US')} ر.س`;
+      revenueBreakdownEl.textContent = `نقد: ${cash.toLocaleString('en-US')} | شبكة: ${card.toLocaleString('en-US')} | تحويل: ${transfer.toLocaleString('en-US')} ر.س`;
     } else {
       if (revenueTotalEl) revenueTotalEl.textContent = '—';
       if (revenueBreakdownEl) revenueBreakdownEl.textContent = 'بيانات الوردية غير متاحة';
@@ -456,7 +456,7 @@
 
       // Render Charts
       renderAnalyticsCharts(monthlyData, stats);
-      await loadOccupancyForecast();
+      await loadOccupancyForecast(stats);
 
       // 3. Load Available & Future Reserved Rooms into Booking Dropdown
       const currentSelectedVal = App.DOM.roomSelect ? App.DOM.roomSelect.value : '';
