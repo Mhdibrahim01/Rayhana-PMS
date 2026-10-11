@@ -510,6 +510,18 @@
     App.DOM.overviewEmpty.style.display = 'none';
     const e = App.Helpers.escapeHtml;
     const today = String(App.State.businessDate || App.Helpers.getLocalDateString());
+    const actualArrivalDate = reservation => {
+      const timestamp = reservation.actual_check_in_at || reservation.created_at;
+      if (!timestamp) return String(reservation.check_in_date || '-').slice(0, 10);
+      const parsed = App.Helpers.parseStoredTimestamp(timestamp);
+      if (!parsed || Number.isNaN(parsed.getTime())) return String(reservation.check_in_date || '-').slice(0, 10);
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: App.Helpers.getHotelTimezone(),
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(parsed);
+      const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+      return `${values.year}-${values.month}-${values.day}`;
+    };
     const icons = {
       preview: '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>',
       checkout: '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>',
@@ -522,6 +534,8 @@
     const titles = { preview: 'معاينة تفاصيل الحجز', checkout: 'تسجيل مغادرة وتسليم الغرفة', payment: 'تسجيل دفعة سداد جديدة', extend: 'تمديد فترة الإقامة', invoice: 'طباعة سند الاستلام والإقامة (فاتورة)', whatsapp: 'مراسلة النزيل عبر واتساب', cancel: 'إلغاء الحجز' };
     App.DOM.overviewTableBody.innerHTML = recent.map(r => {
       const isContract = r.booking_type === 'عقد مفتوح';
+      const isEarlyMorningCheckin = Number(r.is_early_checkin) === 1;
+      const arrivalDate = isEarlyMorningCheckin ? actualArrivalDate(r) : String(r.check_in_date || '-').slice(0, 10);
       const storedTotal = Number(r.total_price || 0);
       const paid = Number((r.ledger_paid_amount ?? r.paid_amount) || 0);
       const rate = Number(r.custom_nightly_price || r.price_per_night || 0);
@@ -569,7 +583,7 @@
         '<td class="overview-booking-number-cell" data-label="رقم الحجز"><bdi class="overview-booking-number" dir="ltr">' + e(bookingNumber) + '</bdi></td>' +
         '<td class="overview-booking-guest-cell" data-label="بيانات النزيل"><strong class="overview-booking-guest-name" title="' + e(r.guest_name || '') + '">' + e(r.guest_name || '-') + '</strong><small class="overview-booking-guest-phone" dir="ltr">' + e(r.guest_phone || '—') + '</small></td>' +
         '<td class="overview-booking-room-cell" data-label="رقم الغرفة" style="text-align: center;"><button type="button" class="checkout-room-chip clickable-room-chip" data-action="preview-reservation" data-id="' + e(r.id) + '" title="عرض تفاصيل الغرفة ' + e(r.room_number || '') + '">' + e(r.room_number || '-') + '</button></td>' +
-        '<td class="overview-booking-date" data-label="الوصول والمغادرة"><span class="overview-date-line"><small>من</small><bdi>' + e(String(r.check_in_date || '-').slice(0, 10)) + '</bdi></span><span class="overview-date-line"><small>إلى</small>' + (isContract ? '<strong class="overview-open-contract">عقد مفتوح</strong>' : '<bdi>' + e(String(r.check_out_date || '-').slice(0, 10)) + '</bdi>') + '</span></td>' +
+        '<td class="overview-booking-date" data-label="الوصول والمغادرة"><span class="overview-date-line"><small>' + (isEarlyMorningCheckin ? 'فعلي' : 'من') + '</small><bdi>' + e(arrivalDate) + '</bdi></span><span class="overview-date-line"><small>إلى</small>' + (isContract ? '<strong class="overview-open-contract">عقد مفتوح</strong>' : '<bdi>' + e(String(r.check_out_date || '-').slice(0, 10)) + '</bdi>') + '</span></td>' +
         '<td class="overview-booking-financial" data-label="المبلغ والمدفوع"><strong>' + total.toLocaleString() + ' ر.س</strong>' + (isContract ? '<small>' + elapsedNights + (elapsedNights === 1 ? ' ليلة' : ' ليالٍ') + ' × ' + rate.toLocaleString() + ' ر.س</small>' : '') + balanceLine + '</td>' +
         '<td class="overview-booking-method" data-label="طريقة السداد">' + e(r.payment_method || '—') + '</td>' +
         '<td class="overview-booking-status" data-label="حالة السداد"><span class="status-badge ' + paymentTone + '">' + e(paymentDisplayStatus) + '</span><small>مدفوع: ' + paid.toLocaleString() + ' ر.س</small>' + (isLate ? '<span class="overview-late-inline">' + lateBadge + '</span>' : '') + '</td>' +
