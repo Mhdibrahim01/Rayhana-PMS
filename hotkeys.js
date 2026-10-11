@@ -109,8 +109,17 @@
 
   function isNativePickerOpen(event) {
     const target = event.target;
+    if (target?.closest?.('#command-palette-modal, #attention-inbox-modal, .command-palette-dialog, .attention-inbox-dialog')) {
+      return false;
+    }
     if (target?.closest?.('select, input[type="date"], input[type="time"], input[type="datetime-local"], [role="combobox"], [aria-haspopup="listbox"]')) return true;
-    return Boolean(document.querySelector('.flatpickr-calendar.open, [role="listbox"]:not([hidden]), [data-state="open"][data-dropdown]'));
+    const openCalendar = document.querySelector('.flatpickr-calendar.open');
+    if (openCalendar && isVisible(openCalendar)) return true;
+    const openDropdown = document.querySelector('[data-state="open"][data-dropdown]');
+    if (openDropdown && isVisible(openDropdown)) return true;
+    const openListbox = document.querySelector('[role="listbox"]:not(#command-palette-results):not([hidden])');
+    if (openListbox && isVisible(openListbox)) return true;
+    return false;
   }
 
   function buildHelpPopover() {

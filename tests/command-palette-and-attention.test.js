@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function createCommandPaletteEnv(mockState = {}, mockHelpers = {}, mockApi = null) {
+function createCommandPaletteEnv(mockState = {}, mockHelpers = {}, mockApi = null, initialStorage = {}) {
   const App = {
     State: {
       businessDate: '2026-10-08',
@@ -24,8 +24,17 @@ function createCommandPaletteEnv(mockState = {}, mockHelpers = {}, mockApi = nul
     }
   };
 
+  const storageMap = new Map(Object.entries(initialStorage));
+  const localStorageMock = {
+    getItem: (k) => storageMap.has(k) ? storageMap.get(k) : null,
+    setItem: (k, v) => storageMap.set(k, String(v)),
+    removeItem: (k) => storageMap.delete(k),
+    clear: () => storageMap.clear()
+  };
+
   const windowMock = {
     DashboardApp: App,
+    localStorage: localStorageMock,
     addEventListener: () => {},
     setTimeout: () => {},
     setInterval: () => {}
@@ -46,6 +55,7 @@ function createCommandPaletteEnv(mockState = {}, mockHelpers = {}, mockApi = nul
   const context = vm.createContext({
     window: windowMock,
     document: documentMock,
+    localStorage: localStorageMock,
     console,
     setTimeout: (fn) => fn(),
     setInterval: () => 1,
@@ -61,7 +71,7 @@ function createCommandPaletteEnv(mockState = {}, mockHelpers = {}, mockApi = nul
   });
   vm.runInContext(code, context);
 
-  return { App, CommandPalette: App.CommandPalette, window: windowMock };
+  return { App, CommandPalette: App.CommandPalette, window: windowMock, localStorage: localStorageMock };
 }
 
 test('Smart Command Palette (Ctrl+K) & Attention Inbox Unit Tests', async t => {
@@ -943,4 +953,339 @@ test('Smart Command Palette (Ctrl+K) & Attention Inbox Unit Tests', async t => {
       assert.equal(env.App.State.reservationsCache[0].status, 'مكتمل');
     });
   });
+
+  await t.test('Recent Items (MRU) Execution & Auto-Healing (Fixes Ctrl+1 on Occupied Room)', async t2 => {
+    const res202 = {
+      id: 2020,
+      room_id: 2,
+      room_number: '202',
+      guest_name: 'عبدالرحمن حمد احمد ال ابوالسعود حكمي',
+      guest_phone: '0583409941',
+      status: 'مؤكد',
+      check_in_date: '2026-10-01',
+      check_out_date: '2026-11-10',
+      total_price: 3000,
+      paid_amount: 1000
+    };
+    const room202 = { id: 2, room_number: '202', status: 'مشغولة' };
+
+    const res67 = {
+      id: 67,
+      room_id: 3,
+      room_number: '208',
+      guest_name: 'شمس تبريز احمد',
+      status: 'مؤكد',
+      check_out_date: '2026-11-04'
+    };
+
+    const res204 = {
+      id: 2040,
+      room_id: 4,
+      room_number: '204',
+      guest_name: 'نور زمين خان شير',
+      status: 'مؤكد',
+      check_out_date: '2026-10-12'
+    };
+
+    await t2.test('Occupied room recent item (without actionType) auto-deduces action and opens reservation preview', () => {
+      let previewedResId = null;
+      const initialMRU = [
+        {
+          id: 'rec-1',
+          title: 'غرفة 202 (مشغولة) • النزيل: عبدالرحمن حمد احمد ال ابوالسعود حكمي',
+          subtitle: 'الجوال: 0583409941 • المغادرة: 2026-11-10 • المتبقي: 2,000 ر.س ⚠️',
+          badge: 'مشغولة',
+          actionType: null,
+          actionPayload: null
+        }
+      ];
+
+      const env = createCommandPaletteEnv(
+        {
+          reservationsCache: [res202, res67, res204],
+          roomsCache: [room202]
+        },
+        {
+          openReservationPreview: (id) => {
+            previewedResId = id;
+          }
+        },
+        null,
+        {
+          'rayhana_palette_recent_mru': JSON.stringify(initialMRU)
+        }
+      );
+
+      const items = env.CommandPalette.getRecentItems();
+      assert.equal(items.length, 1);
+      // Auto-healed:
+      assert.equal(items[0].actionType, 'preview');
+      assert.equal(items[0].actionPayload.roomNumber, '202');
+
+      const resolved = env.CommandPalette.resolveRecentActionItem(items[0], {
+        reservations: [res202],
+        rooms: [room202]
+      });
+
+      assert.ok(resolved);
+      assert.equal(typeof resolved.actionFn, 'function');
+
+      // Execute item (like pressing Ctrl+1 or clicking):
+      resolved.actionFn();
+      assert.equal(previewedResId, 2020);
+    });
+
+    await t2.test('Reservation details (#67) recent item auto-deduces action and opens reservation preview', () => {
+      let previewedResId = null;
+      const item67 = {
+        title: 'تفاصيل الحجز #67 • شمس تبريز احمد (غرفة 208)',
+        subtitle: 'الحالة: مؤكد • الوصول: 2026-10-05 • المغادرة: 2026-11-04 • المتبقي: 866.67 ر.س',
+        badge: 'مؤكد'
+      };
+
+      const env = createCommandPaletteEnv(
+        { reservationsCache: [res67] },
+        { openReservationPreview: (id) => { previewedResId = id; } }
+      );
+
+      const resolved = env.CommandPalette.resolveRecentActionItem(item67, { reservations: [res67] });
+      assert.ok(resolved);
+      resolved.actionFn();
+      assert.equal(previewedResId, 67);
+    });
+
+    await t2.test('Extend stay recent item opens extend stay modal', () => {
+      let extendedResId = null;
+      const itemExtend = {
+        title: 'تمديد إقامة النزيل: نور زمين خان شير • غرفة 204',
+        subtitle: 'المغادرة المقررة: 2026-10-12 • فتح نافذة التمديد واحتساب الليالي',
+        badge: 'تمديد فوري 📅'
+      };
+
+      const env = createCommandPaletteEnv(
+        { reservationsCache: [res204] },
+        {}
+      );
+      env.window.openExtendStayModal = (id) => { extendedResId = id; };
+
+      const resolved = env.CommandPalette.resolveRecentActionItem(itemExtend, { reservations: [res204] });
+      assert.ok(resolved);
+      resolved.actionFn();
+      assert.equal(extendedResId, 2040);
+    });
+
+    await t2.test('Transfer room recent item opens transfer room modal', () => {
+      let transferredResId = null;
+      const itemTransfer = {
+        title: 'نقل النزيل إلى غرفة أخرى • غرفة 202',
+        subtitle: 'نقل النزيل (عبدالرحمن حمد احمد ال ابوالسعود حكمي) إلى غرفة بديلة مع الاحتفاظ بالسعر',
+        badge: 'نقل الغرفة',
+        actionType: 'transfer',
+        actionPayload: { reservationId: 2020, roomNumber: '202' }
+      };
+
+      const env = createCommandPaletteEnv(
+        { reservationsCache: [res202] },
+        {}
+      );
+      env.window.openTransferRoomModal = (id) => { transferredResId = id; };
+
+      const resolved = env.CommandPalette.resolveRecentActionItem(itemTransfer, { reservations: [res202] });
+      assert.ok(resolved);
+      resolved.actionFn();
+      assert.equal(transferredResId, 2020);
+    });
+
+    await t2.test('Record recent item automatically populates actionType for occupied room', () => {
+      const env = createCommandPaletteEnv(
+        { reservationsCache: [res202], roomsCache: [room202] },
+        {}
+      );
+
+      const newItem = {
+        title: 'غرفة 202 (مشغولة) • النزيل: عبدالرحمن حمد احمد ال ابوالسعود حكمي',
+        subtitle: 'الجوال: 0583409941 • المغادرة: 2026-11-10',
+        badge: 'مشغولة',
+        actionFn: () => {}
+      };
+
+      env.CommandPalette.recordRecentItem(newItem);
+      const stored = env.CommandPalette.getRecentItems();
+      assert.equal(stored.length, 1);
+      assert.equal(stored[0].actionType, 'preview');
+      assert.equal(stored[0].actionPayload.roomNumber, '202');
+      assert.equal(stored[0].actionPayload.reservationId, 2020);
+    });
+  });
+
+  await t.test('Escape (ESC) Hotkey Handling', async (t2) => {
+    await t2.test('handlePaletteKeydown closes command palette on Escape', () => {
+      let defaultPrevented = false;
+
+      const mockModal = {
+        style: { display: 'flex' },
+        addEventListener: () => {},
+        querySelectorAll: () => [],
+        querySelector: () => null
+      };
+      const mockInput = {
+        value: '',
+        focus: () => {},
+        select: () => {},
+        addEventListener: () => {}
+      };
+      const mockResults = {
+        innerHTML: '',
+        querySelectorAll: () => []
+      };
+
+      const documentMock = {
+        readyState: 'complete',
+        getElementById: (id) => {
+          if (id === 'command-palette-modal') return mockModal;
+          if (id === 'command-palette-input') return mockInput;
+          if (id === 'command-palette-results') return mockResults;
+          return null;
+        },
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        addEventListener: () => {}
+      };
+
+      const windowMock = {
+        DashboardApp: {
+          State: { reservationsCache: [], roomsCache: [], guestsCache: [] },
+          Helpers: {
+            getLocalDateString: () => '2026-10-08',
+            isLateCheckout: () => false,
+            getExpectedCheckoutTime: () => '14:00',
+            escapeHtml: (s) => String(s || '')
+          }
+        },
+        localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {} },
+        addEventListener: () => {},
+        setTimeout: (fn) => fn(),
+        setInterval: () => {}
+      };
+
+      const code = fs.readFileSync(path.resolve(__dirname, '../command-palette.js'), 'utf8');
+      vm.runInNewContext(code, {
+        window: windowMock,
+        document: documentMock,
+        localStorage: windowMock.localStorage,
+        console,
+        setTimeout: (fn) => fn(),
+        clearTimeout: () => {}
+      });
+
+      const App = windowMock.DashboardApp;
+      App.CommandPalette.open();
+      assert.equal(mockModal.style.display, 'flex');
+
+      const event = {
+        key: 'Escape',
+        preventDefault: () => { defaultPrevented = true; }
+      };
+
+      App.CommandPalette.handlePaletteKeydown(event);
+      assert.equal(mockModal.style.display, 'none');
+      assert.equal(defaultPrevented, true);
+    });
+
+    await t2.test('hotkeys.js Escape dismisses visible modal even when command-palette-results role=listbox is present', () => {
+      let modalClosed = false;
+      const fakeCloseBtn = {
+        disabled: false,
+        click: () => { modalClosed = true; }
+      };
+
+      const mockModal = {
+        hidden: false,
+        getAttribute: (attr) => attr === 'aria-hidden' ? 'false' : null,
+        classList: { contains: () => false },
+        matches: () => false,
+        querySelectorAll: (selector) => {
+          if (selector.includes('input')) return [];
+          if (selector.includes('button')) return [fakeCloseBtn];
+          return [];
+        },
+        querySelector: (selector) => {
+          if (selector.includes('[data-modal-close]') || selector.includes('button')) {
+            return fakeCloseBtn;
+          }
+          return null;
+        },
+        getClientRects: () => [{ width: 100, height: 100 }]
+      };
+
+      const mockPaletteResults = {
+        id: 'command-palette-results',
+        getAttribute: (attr) => attr === 'role' ? 'listbox' : null,
+        hidden: false
+      };
+
+      const listeners = [];
+      const windowMock = {
+        __rayhanaFrontDeskHotkeysRegistered: false,
+        __rayhanaFrontDeskHotkeysInitialized: false,
+        getComputedStyle: () => ({ display: 'block', visibility: 'visible', zIndex: '100' }),
+        confirm: () => true,
+        localStorage: { getItem: () => null },
+        setTimeout: (fn) => fn()
+      };
+
+      const documentMock = {
+        readyState: 'complete',
+        addEventListener: (event, handler) => {
+          if (event === 'keydown') listeners.push(handler);
+        },
+        querySelector: (sel) => {
+          // If query excludes #command-palette-results, it should NOT find mockPaletteResults
+          if (sel.includes(':not(#command-palette-results)')) {
+            return null;
+          }
+          if (sel.includes('role="listbox"')) {
+            return mockPaletteResults;
+          }
+          return null;
+        },
+        querySelectorAll: (sel) => {
+          if (sel.includes('.modal-backdrop')) {
+            return [mockModal];
+          }
+          return [];
+        },
+        getElementById: () => null,
+        body: { appendChild: () => {} }
+      };
+
+      class MockMutationObserver {
+        observe() {}
+        disconnect() {}
+      }
+
+      const hotkeysCode = fs.readFileSync(path.resolve(__dirname, '../hotkeys.js'), 'utf8');
+      vm.runInNewContext(hotkeysCode, {
+        window: windowMock,
+        document: documentMock,
+        MutationObserver: MockMutationObserver,
+        console
+      });
+
+      assert.equal(listeners.length, 1);
+      const keydownHandler = listeners[0];
+
+      const escEvent = {
+        key: 'Escape',
+        code: 'Escape',
+        target: mockModal,
+        preventDefault: () => {},
+        stopImmediatePropagation: () => {}
+      };
+
+      keydownHandler(escEvent);
+      assert.equal(modalClosed, true, 'Modal close button should have been clicked on Escape');
+    });
+  });
 });
+

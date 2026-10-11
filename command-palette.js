@@ -605,11 +605,110 @@
   const RECENT_ITEMS_STORAGE_KEY = 'rayhana_palette_recent_mru';
   const recentActionsRegistry = new Map();
 
+  function deduceActionFromRecord(rec, reservations = getReservations(), rooms = getRooms()) {
+    if (!rec || !rec.title) return null;
+    const title = String(rec.title).trim();
+    const resIdMatch = title.match(/#\s*(\d+)/);
+    const roomMatch = title.match(/(?:غرفة|غ)\s*(\d{1,5})/);
+    const roomNum = roomMatch ? normalizeDigits(roomMatch[1]) : null;
+    const resId = resIdMatch ? resIdMatch[1] : null;
+
+    let res = null;
+    if (resId) {
+      res = reservations.find(r => String(r.id) === String(resId));
+    }
+    if (!res && roomNum) {
+      res = reservations.find(r => String(r.room_number) === String(roomNum) && r.status === 'مؤكد') ||
+            reservations.find(r => String(r.room_number) === String(roomNum));
+    }
+    const room = roomNum ? rooms.find(r => String(r.room_number) === String(roomNum)) : null;
+
+    if (/مستحق|سداد|سند|قبض|دفعة/i.test(title)) {
+      return { actionType: 'payment', actionPayload: { reservationId: res?.id || resId, reservation: res, roomNumber: roomNum } };
+    }
+    if (/فاتورة/i.test(title)) {
+      return { actionType: 'invoice', actionPayload: { reservationId: res?.id || resId, reservation: res, roomNumber: roomNum } };
+    }
+    if (/تمديد/i.test(title)) {
+      return { actionType: 'extend', actionPayload: { reservationId: res?.id || resId, reservation: res, roomNumber: roomNum } };
+    }
+    if (/مغادرة|خروج|تسوية/i.test(title)) {
+      return { actionType: 'checkout', actionPayload: { reservationId: res?.id || resId, reservation: res, roomNumber: roomNum } };
+    }
+    if (/نقل/i.test(title)) {
+      return { actionType: 'transfer', actionPayload: { reservationId: res?.id || resId, reservation: res, roomNumber: roomNum } };
+    }
+    if (/واتساب|whatsapp/i.test(title)) {
+      return { actionType: 'whatsapp', actionPayload: { reservationId: res?.id || resId, roomNumber: roomNum } };
+    }
+    if (/تنظيف/i.test(title)) {
+      return { actionType: 'mark-clean', actionPayload: { roomId: room?.id, roomNumber: roomNum } };
+    }
+    if (/تسكين/i.test(title)) {
+      return { actionType: 'booking', actionPayload: { roomId: room?.id, roomNumber: roomNum } };
+    }
+    if (res || resId || /مشغولة|النزيل|تفاصيل الحجز/i.test(title)) {
+      return { actionType: 'preview', actionPayload: { reservationId: res?.id || resId, reservation: res, roomNumber: roomNum } };
+    }
+    if (room) {
+      if (room.status === 'متاحة') return { actionType: 'booking', actionPayload: { roomId: room.id, roomNumber: roomNum } };
+      if (room.status === 'تنظيف') return { actionType: 'mark-clean', actionPayload: { roomId: room.id, roomNumber: roomNum } };
+      return { actionType: 'view-section', actionPayload: { section: 'rooms', roomNumber: roomNum } };
+    }
+    if (/النزيل/i.test(title)) {
+      return { actionType: 'view-section', actionPayload: { section: 'guests' } };
+    }
+    if (/تقرير الوردية|فلوس الدرج|الخزينة/i.test(title)) {
+      return { actionType: 'command', actionPayload: { command: 'shift' } };
+    }
+    if (/صندوق المهام|تنبيهات/i.test(title)) {
+      return { actionType: 'attention-tab', actionPayload: { tab: 'all' } };
+    }
+    if (/متأخرون/i.test(title)) {
+      return { actionType: 'attention-tab', actionPayload: { tab: 'late-checkout' } };
+    }
+    if (/مغادرات اليوم/i.test(title)) {
+      return { actionType: 'attention-tab', actionPayload: { tab: 'departures-today' } };
+    }
+    if (/الديون|مستحقات/i.test(title)) {
+      return { actionType: 'attention-tab', actionPayload: { tab: 'unpaid-balance' } };
+    }
+    if (/غرف متاحة|غرف مشغولة|غرف التنظيف|شاشة الغرف/i.test(title)) {
+      return { actionType: 'view-section', actionPayload: { section: 'rooms' } };
+    }
+    if (/الحجوزات|سجل الحجوزات/i.test(title)) {
+      return { actionType: 'view-section', actionPayload: { section: 'reservations' } };
+    }
+    if (/دليل النزلاء/i.test(title)) {
+      return { actionType: 'view-section', actionPayload: { section: 'guests' } };
+    }
+    return null;
+  }
+
   function getRecentItems() {
     if (typeof localStorage === 'undefined') return [];
     try {
       const raw = localStorage.getItem(RECENT_ITEMS_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      const items = raw ? JSON.parse(raw) : [];
+      let updated = false;
+      const res = getReservations();
+      const rms = getRooms();
+      items.forEach(item => {
+        if (!item.actionType) {
+          const deduced = deduceActionFromRecord(item, res, rms);
+          if (deduced) {
+            item.actionType = deduced.actionType;
+            item.actionPayload = item.actionPayload || deduced.actionPayload;
+            updated = true;
+          }
+        }
+      });
+      if (updated) {
+        try {
+          localStorage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(items));
+        } catch {}
+      }
+      return items;
     } catch {
       return [];
     }
@@ -622,9 +721,17 @@
       const existing = list.find(i => i.title === item.title);
       list = list.filter(i => i.title !== item.title);
 
-      const actionType = item.actionType || (existing && existing.actionType) || null;
-      const actionPayload = item.actionPayload || (existing && existing.actionPayload) || null;
+      let actionType = item.actionType || (existing && existing.actionType) || null;
+      let actionPayload = item.actionPayload || (existing && existing.actionPayload) || null;
       const query = item.query || (existing && existing.query) || null;
+
+      if (!actionType) {
+        const deduced = deduceActionFromRecord(item, getReservations(), getRooms());
+        if (deduced) {
+          actionType = deduced.actionType;
+          actionPayload = actionPayload || deduced.actionPayload;
+        }
+      }
 
       list.unshift({
         id: item.id || (existing && existing.id) || `rec-${Date.now()}`,
@@ -645,7 +752,7 @@
     } catch {}
   }
 
-  function canReplayAction(actionType, payload) {
+  function canReplayAction(actionType) {
     if (!actionType) return false;
     return ['payment', 'checkout', 'extend', 'transfer', 'invoice', 'room-inquiry', 'booking', 'whatsapp', 'mark-clean', 'preview', 'attention-tab', 'view-section', 'backup', 'command'].includes(actionType);
   }
@@ -723,14 +830,15 @@
         if (!rm) {
           rm = rooms.find(r => (roomId && r.id === roomId) || (roomNumber && String(r.room_number) === String(roomNumber)));
         }
-        if (rm) {
-          const num = rm.room_number || roomNumber;
-          if (paletteInput) {
-            paletteInput.value = `!${num}`;
-            paletteInput.focus();
-            handlePaletteSearch(`!${num}`);
-          } else {
-            switchViewSection('rooms');
+        const activeRes = p.reservation || reservations.find(r => (roomId && r.room_id === roomId) || (roomNumber && String(r.room_number) === String(roomNumber) && r.status === 'مؤكد'));
+        if (activeRes && App?.Helpers?.openReservationPreview) {
+          App.Helpers.openReservationPreview(activeRes.id);
+        } else if (rm) {
+          switchViewSection('rooms');
+          const searchInput = document.getElementById('search-rooms');
+          if (searchInput) {
+            searchInput.value = rm.room_number || roomNumber;
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
           }
         } else {
           showMissingHelperToast();
@@ -739,13 +847,16 @@
       }
       case 'booking': {
         let rm = p.room;
-        if (!rm && roomNumber) {
-          rm = rooms.find(r => String(r.room_number) === String(roomNumber));
+        if (!rm && (roomId || roomNumber)) {
+          rm = rooms.find(r => (roomId && r.id === roomId) || (roomNumber && String(r.room_number) === String(roomNumber)));
         }
-        if (rm && App?.Helpers?.initiateRoomBooking) {
-          App.Helpers.initiateRoomBooking(rm);
+        const targetId = rm?.id || roomId;
+        if (targetId && App?.Helpers?.initiateRoomBooking) {
+          App.Helpers.initiateRoomBooking(targetId);
         } else {
-          showMissingHelperToast();
+          const btn = document.getElementById('btn-open-new-reservation-modal');
+          if (btn) btn.click();
+          else switchViewSection('rooms');
         }
         break;
       }
@@ -760,11 +871,13 @@
       }
       case 'mark-clean': {
         let rm = p.room;
-        if (!rm) {
+        if (!rm && (roomId || roomNumber)) {
           rm = rooms.find(r => (roomId && r.id === roomId) || (roomNumber && String(r.room_number) === String(roomNumber)));
         }
         if (rm) {
           requestRoomCleaningCompletion(rm);
+        } else {
+          showMissingHelperToast();
         }
         break;
       }
@@ -782,8 +895,35 @@
       case 'attention-tab':
         openAttentionInboxModal(p.tab || 'all');
         break;
+      case 'command': {
+        if (p.command === 'shift') {
+          const currentUserRole = App?.State?.currentUser?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('currentUserRole') : null);
+          const isAdmin = currentUserRole === 'Admin';
+          if (!isAdmin) {
+            if (App?.Helpers?.showToast) App.Helpers.showToast('تقرير الوردية التفصيلي متاح لمدير النظام فقط (Admin).', 'warning');
+            return;
+          }
+          if (typeof window.openShiftAuditModal === 'function') window.openShiftAuditModal();
+          else showMissingHelperToast();
+        }
+        break;
+      }
       case 'view-section':
         if (p.section) switchViewSection(p.section);
+        if (p.guestName) {
+          const searchInput = document.getElementById('search-guests');
+          if (searchInput) {
+            searchInput.value = p.guestName;
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+        if (p.roomNumber) {
+          const searchInput = document.getElementById('search-rooms');
+          if (searchInput) {
+            searchInput.value = p.roomNumber;
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
         break;
       case 'backup':
         if (typeof window.openDailyBackupModal === 'function') {
@@ -820,9 +960,77 @@
       return () => openAttentionInboxModal('unpaid-balance');
     }
     if (/تقرير\s*الوردية|فلوس\s*الدرج|الوردية\s*والدرج/i.test(title)) {
-      return () => openAttentionInboxModal('all');
+      return () => {
+        const currentUserRole = App?.State?.currentUser?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('currentUserRole') : null);
+        const isAdmin = currentUserRole === 'Admin';
+        if (!isAdmin) {
+          if (App?.Helpers?.showToast) App.Helpers.showToast('تقرير الوردية التفصيلي متاح لمدير النظام فقط (Admin).', 'warning');
+          return;
+        }
+        if (typeof window.openShiftAuditModal === 'function') window.openShiftAuditModal();
+        else showMissingHelperToast();
+      };
     }
 
+    // 1. Check reservation ID in title: e.g. #67, تفاصيل الحجز #67, حجز #104
+    const resIdMatch = title.match(/#\s*(\d+)/);
+    if (resIdMatch) {
+      const resId = resIdMatch[1];
+      const res = reservations.find(r => String(r.id) === String(resId));
+
+      if (/فاتورة/i.test(title)) {
+        return () => {
+          if (window.openInvoiceModal) window.openInvoiceModal(resId);
+          else if (App?.Helpers?.openReservationPreview) App.Helpers.openReservationPreview(resId);
+          else showMissingHelperToast();
+        };
+      }
+      if (/مستحق|سداد|سند|قبض|دفعة/i.test(title)) {
+        return () => {
+          if (window.openAddPaymentModal) window.openAddPaymentModal(resId);
+          else if (App?.Helpers?.openReservationPreview) App.Helpers.openReservationPreview(resId);
+          else showMissingHelperToast();
+        };
+      }
+      if (/تمديد/i.test(title)) {
+        return () => {
+          if (window.openExtendStayModal) window.openExtendStayModal(resId);
+          else if (App?.Helpers?.openReservationPreview) App.Helpers.openReservationPreview(resId);
+          else showMissingHelperToast();
+        };
+      }
+      if (/مغادرة|خروج|تسوية/i.test(title)) {
+        return () => {
+          if (res && App?.Helpers?.openContractSettleModal) App.Helpers.openContractSettleModal(res);
+          else if (App?.Helpers?.openReservationPreview) App.Helpers.openReservationPreview(resId);
+          else showMissingHelperToast();
+        };
+      }
+      if (/نقل/i.test(title)) {
+        return () => {
+          if (window.openTransferRoomModal) window.openTransferRoomModal(resId);
+          else if (App?.Helpers?.openTransferRoomModal) App.Helpers.openTransferRoomModal(resId);
+          else showMissingHelperToast();
+        };
+      }
+      if (/واتساب|whatsapp/i.test(title)) {
+        return () => {
+          if (window.sendReservationWhatsApp) window.sendReservationWhatsApp(resId);
+          else showMissingHelperToast();
+        };
+      }
+      return () => {
+        if (App?.Helpers?.openReservationPreview) {
+          App.Helpers.openReservationPreview(resId);
+        } else if (window.openInvoiceModal) {
+          window.openInvoiceModal(resId);
+        } else {
+          showMissingHelperToast();
+        }
+      };
+    }
+
+    // 2. Check room number in title: e.g. غرفة 202, غ 202
     const roomMatch = title.match(/(?:غرفة|غ)\s*(\d{1,5})/);
     if (roomMatch) {
       const roomNum = normalizeDigits(roomMatch[1]);
@@ -866,14 +1074,62 @@
           };
         }
       }
-      if (room) {
+      if (/نقل/i.test(title)) {
+        if (res) {
+          return () => {
+            if (window.openTransferRoomModal) window.openTransferRoomModal(res.id);
+            else if (App?.Helpers?.openTransferRoomModal) App.Helpers.openTransferRoomModal(res.id);
+            else showMissingHelperToast();
+          };
+        }
+      }
+      if (/واتساب|whatsapp/i.test(title)) {
+        if (res) {
+          return () => {
+            if (window.sendReservationWhatsApp) window.sendReservationWhatsApp(res.id);
+            else showMissingHelperToast();
+          };
+        }
+      }
+      if (/تنظيف/i.test(title)) {
+        if (room) {
+          return () => requestRoomCleaningCompletion(room);
+        }
+      }
+      if (/تسكين/i.test(title)) {
+        if (room) {
+          return () => {
+            if (App?.Helpers?.initiateRoomBooking) App.Helpers.initiateRoomBooking(room.id);
+            else switchViewSection('rooms');
+          };
+        }
+      }
+      // If room is occupied, mentions guest, or reservation exists:
+      if (res) {
         return () => {
-          if (paletteInput) {
-            paletteInput.value = `!${roomNum}`;
-            paletteInput.focus();
-            handlePaletteSearch(`!${roomNum}`);
+          if (App?.Helpers?.openReservationPreview) {
+            App.Helpers.openReservationPreview(res.id);
           } else {
-            switchViewSection('rooms');
+            showMissingHelperToast();
+          }
+        };
+      }
+      if (room) {
+        if (room.status === 'متاحة') {
+          return () => {
+            if (App?.Helpers?.initiateRoomBooking) App.Helpers.initiateRoomBooking(room.id);
+            else switchViewSection('rooms');
+          };
+        }
+        if (room.status === 'تنظيف') {
+          return () => requestRoomCleaningCompletion(room);
+        }
+        return () => {
+          switchViewSection('rooms');
+          const searchInput = document.getElementById('search-rooms');
+          if (searchInput) {
+            searchInput.value = roomNum;
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
           }
         };
       }
@@ -888,6 +1144,18 @@
   }
 
   function resolveRecentActionItem(rec, context) {
+    const reservations = context?.reservations || getReservations();
+    const rooms = context?.rooms || getRooms();
+
+    // Auto-heal missing actionType/payload from title if absent
+    if (!rec.actionType) {
+      const deduced = deduceActionFromRecord(rec, reservations, rooms);
+      if (deduced) {
+        rec.actionType = deduced.actionType;
+        rec.actionPayload = rec.actionPayload || deduced.actionPayload;
+      }
+    }
+
     const cachedFn = recentActionsRegistry.get(rec.title);
     if (typeof cachedFn === 'function') {
       return {
@@ -903,7 +1171,7 @@
       };
     }
 
-    if (rec.actionType && canReplayAction(rec.actionType, rec.actionPayload)) {
+    if (rec.actionType && canReplayAction(rec.actionType)) {
       return {
         category: '🕒 تم الوصول إليها مؤخراً',
         icon: rec.icon || '🕒',
@@ -927,6 +1195,8 @@
         subtitle: rec.subtitle || 'سجل العمليات السابقة',
         badge: rec.badge || 'أخير',
         isRecentWrapper: true,
+        actionType: rec.actionType,
+        actionPayload: rec.actionPayload,
         actionFn: heuristicFn
       };
     }
@@ -1353,6 +1623,8 @@
           title: `غرفة ${displayRoomNum} (${statusText}) • النزيل: ${activeRes.guest_name || 'نزيل مقيم'}`,
           subtitle: `الجوال: ${activeRes.guest_phone || '-'} • المغادرة: ${activeRes.check_out_date || 'مفتوح'} • المتبقي: ${balance.toLocaleString('en-US')} ر.س ${balance > 0 ? '⚠️' : '✓'}`,
           badge: statusText,
+          actionType: 'preview',
+          actionPayload: { reservationId: activeRes.id, reservation: activeRes, roomNumber: activeRes.room_number },
           actionFn: () => {
             if (App?.Helpers?.openReservationPreview) {
               App.Helpers.openReservationPreview(activeRes.id);
@@ -1368,6 +1640,8 @@
           title: `تسجيل مغادرة وتصفية الحساب • غرفة ${displayRoomNum}`,
           subtitle: `إنهاء إقامة النزيل (${activeRes.guest_name}) وتسليم الغرفة`,
           badge: 'مغادرة',
+          actionType: 'checkout',
+          actionPayload: { reservationId: activeRes.id, reservation: activeRes, roomNumber: activeRes.room_number },
           actionFn: () => {
             if (App?.Helpers?.openContractSettleModal) {
               App.Helpers.openContractSettleModal(activeRes);
@@ -1386,6 +1660,8 @@
             title: `مراسلة النزيل (${activeRes.guest_name}) عبر واتساب`,
             subtitle: `إرسال رسالة سريعة إلى ${activeRes.guest_phone}`,
             badge: 'WhatsApp',
+            actionType: 'whatsapp',
+            actionPayload: { reservationId: activeRes.id, reservation: activeRes, roomNumber: activeRes.room_number },
             actionFn: () => {
               if (window.sendReservationWhatsApp) window.sendReservationWhatsApp(activeRes.id);
               else showMissingHelperToast();
@@ -1400,6 +1676,8 @@
             title: `تسجيل دفعة سداد جديدة • متبقي ${balance.toLocaleString('en-US')} ر.س`,
             subtitle: `تحصيل مبلغ مالي للنزيل (${activeRes.guest_name})`,
             badge: 'سداد دفعة',
+            actionType: 'payment',
+            actionPayload: { reservationId: activeRes.id, reservation: activeRes, roomNumber: activeRes.room_number },
             actionFn: () => {
               if (window.openAddPaymentModal) {
                 window.openAddPaymentModal(activeRes.id);
@@ -1439,6 +1717,8 @@
           title: `غرفة ${displayRoomNum} (متاحة للتشغيل)`,
           subtitle: `النوع: ${room.type || 'عادية'} • السعر: ${Number(room.price_per_night || 0).toLocaleString('en-US')} ر.س/ليلة • الطابق: ${room.floor || '1'}`,
           badge: 'متاحة ✓',
+          actionType: 'booking',
+          actionPayload: { roomId: room.id, roomNumber: room.room_number },
           actionFn: () => {
             if (App?.Helpers?.initiateRoomBooking) App.Helpers.initiateRoomBooking(room.id);
             else switchViewSection('rooms');
@@ -1451,6 +1731,8 @@
           title: `تسكين فوري للغرفة ${displayRoomNum}`,
           subtitle: 'فتح نموذج حجز جديد واختيار هذه الغرفة تلقائياً',
           badge: 'تسكين',
+          actionType: 'booking',
+          actionPayload: { roomId: room.id, roomNumber: room.room_number },
           actionFn: () => {
             if (App?.Helpers?.initiateRoomBooking) App.Helpers.initiateRoomBooking(room.id);
             else switchViewSection('rooms');
@@ -1463,6 +1745,8 @@
           title: `غرفة ${displayRoomNum} (تحت التنظيف)`,
           subtitle: 'الغرفة بانتظار إشعار عمال النظافة قبل إتاحتها للحجز',
           badge: 'تنظيف',
+          actionType: 'mark-clean',
+          actionPayload: { roomId: room.id, roomNumber: room.room_number },
           actionFn: () => requestRoomCleaningCompletion(room)
         });
       } else if (room) {
@@ -1472,6 +1756,8 @@
           title: `غرفة ${displayRoomNum} (حالة: ${room.status})`,
           subtitle: `النوع: ${room.type || 'عادية'} • الطابق: ${room.floor || '1'}`,
           badge: room.status,
+          actionType: 'view-section',
+          actionPayload: { section: 'rooms', roomNumber: room.room_number },
           actionFn: () => switchViewSection('rooms')
         });
       }
@@ -1484,6 +1770,8 @@
         title: `حجز رقم #${resById.id} • ${resById.guest_name || 'نزيل'} (غرفة ${resById.room_number || '-'})`,
         subtitle: `الحالة: ${resById.status} • الوصول: ${resById.check_in_date || '-'} • المغادرة: ${resById.check_out_date || '-'}`,
         badge: resById.status,
+        actionType: 'preview',
+        actionPayload: { reservationId: resById.id, reservation: resById, roomNumber: resById.room_number },
         actionFn: () => {
           if (App?.Helpers?.openReservationPreview) {
             App.Helpers.openReservationPreview(resById.id);
@@ -1577,6 +1865,8 @@
           title: `تفاصيل الحجز #${res.id} • ${res.guest_name || 'نزيل'} (غرفة ${res.room_number || '-'})`,
           subtitle: `الحالة: ${res.status} • الوصول: ${res.check_in_date || '-'} • المغادرة: ${res.check_out_date || '-'} • المتبقي: ${fin.remaining.toLocaleString('en-US')} ر.س`,
           badge: res.status,
+          actionType: 'preview',
+          actionPayload: { reservationId: res.id, reservation: res, roomNumber: res.room_number },
           actionFn: () => {
             if (App?.Helpers?.openReservationPreview) {
               App.Helpers.openReservationPreview(res.id);
@@ -1593,6 +1883,8 @@
           title: `فاتورة الحجز #${res.id}`,
           subtitle: `استعراض الفاتورة الضريبية والبنود المحسوبة (الإجمالي: ${fin.effectiveTotal.toLocaleString('en-US')} ر.س)`,
           badge: 'فاتورة ضريبية',
+          actionType: 'invoice',
+          actionPayload: { reservationId: res.id, reservation: res, roomNumber: res.room_number },
           actionFn: () => {
             if (window.openInvoiceModal) {
               window.openInvoiceModal(res.id);
@@ -1612,6 +1904,8 @@
             title: `تحصيل دفعة مالية • متبقي ${fin.remaining.toLocaleString('en-US')} ر.س`,
             subtitle: `تسجيل سند قبض لحساب النزيل (${res.guest_name || 'نزيل'})`,
             badge: 'سند قبض 💳',
+            actionType: 'payment',
+            actionPayload: { reservationId: res.id, reservation: res, roomNumber: res.room_number },
             actionFn: () => {
               if (window.openAddPaymentModal) {
                 window.openAddPaymentModal(res.id);
@@ -1632,6 +1926,8 @@
             title: `تسجيل مغادرة وتصفية الحساب • غرفة ${res.room_number || '-'}`,
             subtitle: `إنهاء إقامة النزيل وتسليم الغرفة`,
             badge: 'مغادرة',
+            actionType: 'checkout',
+            actionPayload: { reservationId: res.id, reservation: res, roomNumber: res.room_number },
             actionFn: () => {
               if (App?.Helpers?.openContractSettleModal) {
                 App.Helpers.openContractSettleModal(res);
@@ -1652,6 +1948,8 @@
             title: 'تمديد الإقامة وتحديث المغادرة',
             subtitle: `إضافة ليالٍ إضافية لحجز الغرفة ${res.room_number || '-'}`,
             badge: 'تمديد الإقامة',
+            actionType: 'extend',
+            actionPayload: { reservationId: res.id, reservation: res, roomNumber: res.room_number },
             actionFn: () => {
               if (window.openExtendStayModal) {
                 window.openExtendStayModal(res.id);
@@ -2190,6 +2488,8 @@
               title: `غرفة ${room.room_number} • النزيل: ${activeRes ? activeRes.guest_name : 'نزيل مقيم'}`,
               subtitle: activeRes ? `الجوال: ${activeRes.guest_phone || '-'} • المغادرة: ${activeRes.check_out_date || 'مفتوح'}` : `حالة الغرفة: ${room.status}`,
               badge: room.status,
+              actionType: activeRes ? 'preview' : 'view-section',
+              actionPayload: activeRes ? { reservationId: activeRes.id, reservation: activeRes, roomNumber: room.room_number } : { section: 'rooms', roomNumber: room.room_number },
               actionFn: () => {
                 if (activeRes && App?.Helpers?.openReservationPreview) {
                   App.Helpers.openReservationPreview(activeRes.id);
@@ -3017,6 +3317,8 @@
         title: `غرفة ${r.room_number} • ${r.type || 'عادية'}`,
         subtitle: `الحالة: ${r.status} • السعر: ${Number(r.price_per_night || 0).toLocaleString('en-US')} ر.س/ليلة`,
         badge: r.status,
+        actionType: 'view-section',
+        actionPayload: { section: 'rooms', roomNumber: r.room_number },
         actionFn: () => {
           switchViewSection('rooms');
           const searchInput = document.getElementById('search-rooms');
@@ -3048,6 +3350,8 @@
         title: `حجز #${r.id} • ${r.guest_name || 'نزيل'} (غرفة ${r.room_number || '-'})`,
         subtitle: `الحالة: ${r.status} • الوصول: ${r.check_in_date || '-'} • المغادرة: ${r.check_out_date || '-'}`,
         badge: r.status,
+        actionType: 'preview',
+        actionPayload: { reservationId: r.id, reservation: r, roomNumber: r.room_number },
         actionFn: () => {
           if (App?.Helpers?.openReservationPreview) {
             App.Helpers.openReservationPreview(r.id);
@@ -3080,6 +3384,8 @@
         title: `النزيل: ${g.name}`,
         subtitle: `الجوال: ${g.phone || '-'} • الهوية: ${g.id_number || '-'} ${g.is_banned ? '• (محظور ⛔)' : ''}`,
         badge: g.is_banned ? 'محظور' : 'نشط',
+        actionType: 'view-section',
+        actionPayload: { section: 'guests', guestName: g.name },
         actionFn: () => {
           switchViewSection('guests');
           const searchInput = document.getElementById('search-guests');
@@ -3129,10 +3435,13 @@
       if (event.target === paletteModal) closeCommandPalette();
     });
 
-    // Trap focus inside modal
+    // Trap focus inside modal & close on Escape
     paletteModal.addEventListener('keydown', event => {
       if (event.key === 'Tab') {
         trapModalFocus(event, paletteModal);
+      } else if (event.key === 'Escape' || event.code === 'Escape' || event.keyCode === 27) {
+        event.preventDefault();
+        closeCommandPalette();
       }
     });
 
@@ -3223,6 +3532,12 @@
   }
 
   function handlePaletteKeydown(e) {
+    if (e.key === 'Escape' || e.code === 'Escape' || e.keyCode === 27) {
+      e.preventDefault();
+      closeCommandPalette();
+      return;
+    }
+
     if (e.key === 'Tab') {
       const firstSuggestion = currentItemsList.find(item => item.isSuggestion);
       if (firstSuggestion) {
@@ -3638,10 +3953,13 @@
       if (event.target === attentionModal) closeAttentionInboxModal();
     });
 
-    // Trap focus inside attention modal
+    // Trap focus inside attention modal & close on Escape
     attentionModal.addEventListener('keydown', event => {
       if (event.key === 'Tab') {
         trapModalFocus(event, attentionModal);
+      } else if (event.key === 'Escape' || event.code === 'Escape' || event.keyCode === 27) {
+        event.preventDefault();
+        closeAttentionInboxModal();
       }
     });
 
@@ -4114,7 +4432,13 @@
     getRooms,
     getReservations,
     getGuests,
-    COMMAND_REGISTRY
+    COMMAND_REGISTRY,
+    getRecentItems,
+    recordRecentItem,
+    resolveRecentActionItem,
+    deduceActionFromRecord,
+    executePaletteItem,
+    handlePaletteKeydown
   };
 
   if (document.readyState === 'loading') {
