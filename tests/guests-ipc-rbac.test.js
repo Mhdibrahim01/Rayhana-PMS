@@ -64,6 +64,14 @@ test('guests IPC: a signed-out caller cannot reach guest data', async t => {
       assert.equal(res.data, undefined);
     });
 
+    await t.test('reservation history refuses without a session', async () => {
+      const guestId = connection.queryOne('SELECT id FROM guests WHERE phone = ?', ['0501111111']).id;
+      const res = await ipcMain.invoke('guests:get-reservation-history', {}, guestId);
+      assert.equal(res.success, false);
+      assert.match(res.error, /تسجيل الدخول/);
+      assert.equal(res.data, undefined);
+    });
+
     await t.test('search refuses', async () => {
       const res = await ipcMain.invoke('guests:search', {}, { query: '0501111111' });
       assert.equal(res.success, false);
@@ -135,6 +143,13 @@ test('guests IPC: a logged-in User keeps the access front desk needs', async t =
       const paged = await ipcMain.invoke('guests:get-paginated', {}, { page: 1, limit: 5 });
       assert.equal(paged.success, true);
       assert.ok(Array.isArray(paged.data));
+    });
+
+    await t.test('can load reservation history for a guest', async () => {
+      const guestId = connection.queryOne('SELECT id FROM guests WHERE phone = ?', ['0503333333']).id;
+      const res = await ipcMain.invoke('guests:get-reservation-history', {}, guestId);
+      assert.equal(res.success, true);
+      assert.deepEqual(res.data, []);
     });
 
     await t.test('can search a returning guest for booking auto-fill', async () => {

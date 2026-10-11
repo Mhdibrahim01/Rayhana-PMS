@@ -679,6 +679,53 @@
   width: 15px;
   height: 15px;
 }
+.guest-stays-trigger {
+  cursor: pointer;
+  font: inherit;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+.guest-stays-trigger:hover {
+  border-color: #d8b98c !important;
+  background: #f7efe4 !important;
+  transform: translateY(-1px);
+}
+.guest-history-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100080 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+}
+.guest-history-dialog {
+  width: min(1080px, 96vw) !important;
+  max-width: 1080px !important;
+  max-height: min(86vh, 820px) !important;
+}
+.guest-history-header { flex: 0 0 auto; }
+.guest-history-header h2 { margin: 0; color: #1e293b; font-size: 1.05rem; }
+.guest-history-subtitle { margin: 4px 0 0; color: #64748b; font-size: .8rem; }
+.guest-history-content { min-height: 120px; overflow: auto; padding: 16px 20px 20px; }
+.guest-history-state { padding: 34px 16px; color: #64748b; text-align: center; }
+.guest-history-state.is-error { color: #b91c1c; }
+.guest-history-table-wrap { width: 100%; overflow-x: auto; }
+.guest-history-table { width: 100%; min-width: 820px; border-collapse: collapse; color: #334155; font-size: .82rem; }
+.guest-history-table th,
+.guest-history-table td { padding: 10px 9px; border-bottom: 1px solid #e2e8f0; text-align: right; vertical-align: middle; }
+.guest-history-table th { color: #475569; background: #f8fafc; font-weight: 800; white-space: nowrap; }
+.guest-history-table td small { display: block; margin-top: 3px; color: #64748b; font-size: .72rem; }
+.guest-history-table .guest-history-reservation-id { color: #047831; font-family: monospace; font-weight: 800; }
+.guest-history-actual-arrival { color: #047831 !important; }
+.guest-history-status { display: inline-block; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; white-space: nowrap; }
+.guest-history-status.is-active { border-color: #86efaf; background: #ecfdf3; color: #047831; }
+.guest-history-status.is-completed { border-color: #cbd5e1; background: #f1f5f9; color: #475569; }
+.guest-history-status.is-other { border-color: #fecaca; background: #fff1f2; color: #be123c; }
+.guest-history-invoice { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.guest-history-invoice svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+@media (max-width: 700px) {
+  .guest-history-content { padding: 12px; }
+}
 :is(#view-guests) [data-action="edit-guest"] {
   border-color: #cbd5e1 !important;
   background: #f8fafc !important;

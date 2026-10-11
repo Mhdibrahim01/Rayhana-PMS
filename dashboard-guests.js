@@ -10,6 +10,7 @@
   let guestsTotalCount = 0;
   let guestSearchDebounceTimer = null;
   let currentGuestBanFilter = 'all';
+  let guestHistoryModal = null;
 
   async function loadGuestsData(page = guestsCurrentPage) {
     try {
@@ -71,9 +72,9 @@
           <td style="font-family: monospace; color: var(--text-secondary);">${App.Helpers.escapeHtml(g.phone || '-')}</td>
           <td style="color: var(--text-secondary);">${App.Helpers.escapeHtml(g.id_number || '-')}</td>
           <td>
-            <span class="badge" style="background: #fdfaf7; color: #a67c52; border: 1px solid rgba(166, 124, 82, 0.35); font-weight: 800;">
+            <button type="button" class="badge guest-stays-trigger" data-action="guest-reservation-history" data-id="${g.id}" title="عرض سجل إقامات النزيل" aria-label="عرض ${totalStays} ${totalStays === 1 ? 'إقامة' : 'إقامات'} للنزيل ${App.Helpers.escapeHtml(g.name)}">
               ${totalStays} ${totalStays === 1 ? 'إقامة' : 'إقامات'}
-            </span>
+            </button>
           </td>
           <td style="font-weight: 800; color: var(--primary);">${totalSpent.toLocaleString()} ر.س</td>
           <td style="font-size: 0.8rem; color: var(--text-muted);">${App.Helpers.escapeHtml(String(g.created_at || '').split(' ')[0])}</td>
@@ -146,6 +147,89 @@
     if (App.DOM.editGuestName) App.DOM.editGuestName.focus();
   }
 
+  function ensureGuestHistoryModal() {
+    if (guestHistoryModal) return guestHistoryModal;
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop modal-layout-backdrop guest-history-backdrop';
+    modal.style.display = 'none';
+    modal.setAttribute('role', 'presentation');
+    modal.innerHTML = `
+      <section class="modal-layout guest-history-dialog" role="dialog" aria-modal="true" aria-labelledby="guest-history-title" dir="rtl">
+        <header class="modal-layout__header guest-history-header">
+          <div>
+            <h2 id="guest-history-title">سجل إقامات النزيل</h2>
+            <p class="guest-history-subtitle"></p>
+          </div>
+          <button type="button" class="modal-layout__close" data-guest-history-close aria-label="إغلاق سجل الإقامات">&times;</button>
+        </header>
+        <div class="guest-history-content" aria-live="polite"></div>
+      </section>`;
+    document.body.appendChild(modal);
+    const close = () => { modal.style.display = 'none'; };
+    modal.addEventListener('click', event => {
+      if (event.target === modal || event.target.closest('[data-guest-history-close]')) close();
+      const invoiceButton = event.target.closest('[data-action="guest-history-invoice"]');
+      if (!invoiceButton) return;
+      const reservationId = Number(invoiceButton.dataset.id);
+      close();
+      if (reservationId && window.openInvoiceModal) window.openInvoiceModal(reservationId);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && modal.style.display === 'flex') close();
+    });
+    guestHistoryModal = {
+      element: modal,
+      title: modal.querySelector('#guest-history-title'),
+      subtitle: modal.querySelector('.guest-history-subtitle'),
+      content: modal.querySelector('.guest-history-content'),
+      closeButton: modal.querySelector('[data-guest-history-close]')
+    };
+    return guestHistoryModal;
+  }
+
+  async function openGuestReservationHistory(guestId) {
+    const guest = (App.State.guestsCache || []).find(item => Number(item.id) === Number(guestId));
+    if (!guest) return;
+    const modal = ensureGuestHistoryModal();
+    modal.title.textContent = `سجل إقامات ${guest.name || 'النزيل'}`;
+    modal.subtitle.textContent = [guest.phone, guest.id_number].filter(Boolean).join(' · ');
+    modal.content.innerHTML = '<div class="guest-history-state">جارٍ تحميل سجل الإقامات...</div>';
+    modal.element.style.display = 'flex';
+    modal.closeButton.focus();
+
+    try {
+      const result = await window.api.getGuestReservationHistory(Number(guestId));
+      if (!result?.success) throw new Error(result?.error || 'تعذر تحميل سجل الإقامات.');
+      const reservations = Array.isArray(result.data) ? result.data : [];
+      if (!reservations.length) {
+        modal.content.innerHTML = '<div class="guest-history-state">لا توجد حجوزات مسجلة لهذا النزيل.</div>';
+        return;
+      }
+
+      const escape = App.Helpers.escapeHtml;
+      const number = value => Number(value || 0).toLocaleString('ar-SA-u-nu-latn');
+      const rows = reservations.map(reservation => {
+        const stayPeriod = `${escape(reservation.check_in_date || '-')} → ${escape(reservation.check_out_date || 'مفتوح')}`;
+        const actualArrival = Number(reservation.is_early_checkin) === 1 && reservation.actual_check_in_at
+          ? `<small class="guest-history-actual-arrival">الوصول الفعلي: ${escape(App.Helpers.formatArabicDateTime(reservation.actual_check_in_at))}</small>`
+          : '';
+        const statusClass = reservation.status === 'مؤكد' ? 'is-active' : (reservation.status === 'مكتمل' ? 'is-completed' : 'is-other');
+        return `<tr>
+          <td class="guest-history-reservation-id">#${escape(reservation.id)}</td>
+          <td>${escape(reservation.room_number || '-')}<small>${escape(reservation.room_type || '')}</small></td>
+          <td><span dir="ltr">${stayPeriod}</span>${actualArrival}</td>
+          <td>${escape(reservation.booking_type || 'عادي')}</td>
+          <td><strong>${number(reservation.total_price)} ر.س</strong><small>مدفوع ${number(reservation.paid_amount)} ر.س</small></td>
+          <td><span class="guest-history-status ${statusClass}">${escape(reservation.status || 'غير محدد')}</span></td>
+          <td><button type="button" class="btn btn-secondary guest-history-invoice" data-action="guest-history-invoice" data-id="${escape(reservation.id)}" title="معاينة سند الاستلام والإقامة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M8 13h8M8 17h8"></path></svg><span>معاينة السند</span></button></td>
+        </tr>`;
+      }).join('');
+      modal.content.innerHTML = `<div class="guest-history-table-wrap"><table class="guest-history-table"><thead><tr><th>الحجز</th><th>الغرفة</th><th>فترة الإقامة</th><th>نوع الحجز</th><th>الإجمالي والسداد</th><th>الحالة</th><th>السند</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    } catch (error) {
+      modal.content.innerHTML = `<div class="guest-history-state is-error">${App.Helpers.escapeHtml(error.message || 'تعذر تحميل سجل الإقامات.')}</div>`;
+    }
+  }
+
   App.Helpers.initGuests = function() {
   if (App.DOM.btnGuestsPrevPage) {
     App.DOM.btnGuestsPrevPage.addEventListener('click', () => {
@@ -185,6 +269,12 @@
   // Ban / Unban & Edit Guest Action Delegation
   if (App.DOM.guestsTableBody) {
     App.DOM.guestsTableBody.addEventListener('click', async (e) => {
+      const historyBtn = e.target.closest('button[data-action="guest-reservation-history"]');
+      if (historyBtn) {
+        await openGuestReservationHistory(historyBtn.dataset.id);
+        return;
+      }
+
       // Edit Guest (All Staff & Admin)
       const editBtn = e.target.closest('button[data-action="edit-guest"]');
       if (editBtn) {
