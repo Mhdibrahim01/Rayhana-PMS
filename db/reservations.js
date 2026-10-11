@@ -175,9 +175,9 @@ function buildReservationListFilter({ search = '', status = 'all', paymentType =
 
   // Payment filtering
   if (paymentType === 'unpaid') {
-    conditions.push("(COALESCE(r.paid_amount, 0) < r.total_price AND r.status != 'ملغي')");
+    conditions.push("(COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount, 0) < r.total_price AND r.status != 'ملغي')");
   } else if (paymentType === 'paid') {
-    conditions.push("(COALESCE(r.paid_amount, 0) >= r.total_price AND r.total_price > 0)");
+    conditions.push("(COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount, 0) >= r.total_price AND r.total_price > 0)");
   } else if (paymentType === 'cash') {
     conditions.push("r.payment_method = 'نقداً'");
   } else if (paymentType === 'transfer') {
@@ -289,7 +289,11 @@ function getReservationsPage({ page = 1, pageSize = 50, search = '', status = 'a
       SUM(CASE WHEN ${lateCond.condition} THEN 1 ELSE 0 END) AS lateCount,
       SUM(CASE WHEN r.status = 'مكتمل' THEN 1 ELSE 0 END) AS completedCount,
       SUM(CASE WHEN r.status IN ('ملغي', 'ملغي جزئي') THEN 1 ELSE 0 END) AS cancelledCount,
-      SUM(CASE WHEN r.status = 'مؤكد' AND r.total_price > COALESCE(r.paid_amount, 0) THEN (r.total_price - COALESCE(r.paid_amount, 0)) ELSE 0 END) AS dueAmount
+      SUM(CASE
+        WHEN r.status = 'مؤكد' AND r.total_price > COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount, 0)
+        THEN (r.total_price - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount, 0))
+        ELSE 0
+      END) AS dueAmount
     FROM reservations r
   `, [todayStr, todayStr, ...lateCond.params]);
 
