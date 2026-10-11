@@ -135,10 +135,10 @@ function getCurrentShiftRevenueSummary() {
     SELECT
       COALESCE(SUM(amount), 0) AS totalRevenue,
       COALESCE(SUM(CASE
-        WHEN payment_method NOT IN ('بطاقة / مدى', 'شبكة / مدى', 'تحويل بنكي') THEN amount
+        WHEN payment_method NOT IN ('بطاقة / مدى', 'شبكة / مدى', 'شبكة', 'تحويل بنكي') THEN amount
         ELSE 0
       END), 0) AS cashTotal,
-      COALESCE(SUM(CASE WHEN payment_method IN ('بطاقة / مدى', 'شبكة / مدى') THEN amount ELSE 0 END), 0) AS cardTotal,
+      COALESCE(SUM(CASE WHEN payment_method IN ('بطاقة / مدى', 'شبكة / مدى', 'شبكة') THEN amount ELSE 0 END), 0) AS cardTotal,
       COALESCE(SUM(CASE WHEN payment_method = 'تحويل بنكي' THEN amount ELSE 0 END), 0) AS transferTotal
     FROM payments
     WHERE business_date = ? AND payment_method != 'من التأمين'
@@ -214,7 +214,7 @@ function getShiftAuditReport(startDate, endDate) {
       cashTotal += amt;
       if (amt > 0) cashCollected += amt;
       else if (amt < 0) cashRefunded += Math.abs(amt);
-    } else if (p.payment_method === 'بطاقة / مدى' || p.payment_method === 'شبكة / مدى') {
+    } else if (p.payment_method === 'بطاقة / مدى' || p.payment_method === 'شبكة / مدى' || p.payment_method === 'شبكة') {
       cardTotal += amt;
     } else if (p.payment_method === 'تحويل بنكي') {
       transferTotal += amt;

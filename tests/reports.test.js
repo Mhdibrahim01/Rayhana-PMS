@@ -84,6 +84,38 @@ test('revenue and dashboard reports include completed, active, and refunded ledg
       assertDatabaseIntegrity(connection, 'dashboard stats report');
     });
 
+    await t.test('current-day payment summary separates legacy card and bank transfer methods', () => {
+      const before = db.getCurrentShiftRevenueSummary();
+      const room = addRoom('RP-SHIFT-METHODS', 100);
+      const reservationId = createReservation({
+        roomId: room.id,
+        name: 'Report Shift Methods',
+        checkIn: today,
+        checkOut: addDays(today, 2),
+        totalPrice: 300,
+        paidAmount: 60
+      });
+      const payment = connection.queryOne(
+        'SELECT id FROM payments WHERE reservation_id = ? ORDER BY id ASC LIMIT 1',
+        [reservationId]
+      );
+      connection.db.run("UPDATE payments SET payment_method = 'شبكة' WHERE id = ?", [payment.id]);
+      db.addPaymentToReservation({ reservationId, amount: 20, paymentMethod: 'تحويل بنكي' });
+
+      const summary = db.getCurrentShiftRevenueSummary();
+      assert.equal(summary.totalRevenue - before.totalRevenue, 80);
+      assert.equal(summary.cashTotal, before.cashTotal);
+      assert.equal(summary.cardTotal - before.cardTotal, 60);
+      assert.equal(summary.transferTotal - before.transferTotal, 20);
+
+      const auditFinancials = db.getShiftAuditReport(today).financials;
+      assert.equal(auditFinancials.totalRevenue, summary.totalRevenue);
+      assert.equal(auditFinancials.cashTotal, summary.cashTotal);
+      assert.equal(auditFinancials.cardTotal, summary.cardTotal);
+      assert.equal(auditFinancials.transferTotal, summary.transferTotal);
+      assertDatabaseIntegrity(connection, 'current shift payment methods');
+    });
+
     await t.test('room revenue report includes its negative refund row in collected totals', () => {
       const roomReport = db.getRoomRevenueStats(partialRoom.id);
       assert.equal(roomReport.total_expected, 600);
