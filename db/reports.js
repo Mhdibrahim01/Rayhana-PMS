@@ -237,7 +237,9 @@ function getShiftAuditReport(startDate, endDate) {
   // Operational movements in range: Created, Check-in, Check-out, Payment transaction, or Deposit movement.
   // Inactive stay-overs from prior days with no activity within this range are excluded.
   const reservationsInRange = queryAll(`
-    SELECT r.*, g.name AS guest_name, rm.room_number, rm.type AS room_type,
+    SELECT r.*,
+      COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount) AS ledger_paid_amount,
+      g.name AS guest_name, rm.room_number, rm.type AS room_type,
       COALESCE((SELECT SUM(CASE WHEN dm.movement_type IN ('collected', 'reconciled') THEN dm.amount ELSE -dm.amount END) FROM deposit_movements dm WHERE dm.reservation_id = r.id), 0) AS deposit_ledger_balance,
       CASE WHEN NOT EXISTS (SELECT 1 FROM deposit_movements dm WHERE dm.reservation_id = r.id) AND r.deposit_amount > 0 THEN 1 ELSE 0 END AS deposit_legacy_unreconciled
     FROM reservations r
@@ -260,7 +262,7 @@ function getShiftAuditReport(startDate, endDate) {
   for (const r of reservationsInRange) {
     if (r.status === 'ملغي') continue;
     const price = roundMoney(r.total_price || 0);
-    const paid = roundMoney(r.paid_amount || 0);
+    const paid = roundMoney(r.ledger_paid_amount ?? r.paid_amount ?? 0);
     expectedTotal += price;
     outstandingTotal += Math.max(0, roundMoney(price - paid));
   }

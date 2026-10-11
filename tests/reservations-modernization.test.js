@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { withSafeDatabase } = require('./helpers/safe-temp-db');
+const { addDays } = require('./helpers/fixtures');
 
 test('reservations modernization: summary statistics, filters, and sorting', async () => {
   await withSafeDatabase(async (db, connection) => {
@@ -101,5 +102,34 @@ test('reservations modernization: summary statistics, filters, and sorting', asy
     const pageSortCheckout = db.getReservationsPage({ sortBy: 'checkout_asc' });
     assert.equal(pageSortCheckout.rows[0].id, res2.reservationId, 'res2 (yesterday) should be first when sorting by checkout_asc');
     assert.equal(pageSortCheckout.rows[1].id, res3.reservationId, 'res3 (today) should be second');
+
+  });
+});
+
+test('reservation list filters and due summary follow the displayed payment ledger', async () => {
+  await withSafeDatabase(async (db, connection) => {
+    const today = connection.getCurrentBusinessDate();
+    const room = db.getAllRooms()[0];
+    const reservationId = db.createReservation({
+      guestName: 'نزيل اختلاف الرصيد',
+      guestPhone: '0501234567',
+      guestIdNumber: '1098765432',
+      roomId: room.id,
+      bookingType: 'عادي',
+      checkInDate: today,
+      checkOutDate: addDays(today, 1),
+      totalPrice: 200,
+      paidAmount: 200
+    }).reservationId;
+
+    connection.db.run('UPDATE reservations SET paid_amount = 0 WHERE id = ?', [reservationId]);
+    const all = db.getReservationsPage({ page: 1, pageSize: 50 });
+    const listed = all.rows.find(row => row.id === reservationId);
+
+    assert.equal(listed.ledger_paid_amount, 200);
+    assert.equal(all.summary.dueAmount, 0);
+    assert.equal(db.getReservationsPage({ paymentType: 'paid' }).total, 1);
+    assert.equal(db.getReservationsPage({ paymentType: 'unpaid' }).total, 0);
+    assert.equal(db.getShiftAuditReport(today, today).outstandingTotal, 0);
   });
 });
