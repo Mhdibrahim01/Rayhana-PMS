@@ -103,6 +103,24 @@ function getGuestsPaginated({ page = 1, limit = 50, search = '', banFilter = 'al
   };
 }
 
+function getGuestReservationHistory(guestId) {
+  const id = Number(guestId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error('معرف النزيل غير صالح.');
+  return queryAll(`
+    SELECT
+      r.id, r.guest_id, r.check_in_date, r.check_out_date,
+      r.total_price,
+      COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount) AS paid_amount,
+      r.payment_method, r.payment_status, r.status, r.booking_type,
+      r.is_early_checkin, r.actual_check_in_at, r.created_at,
+      rm.room_number, rm.type AS room_type
+    FROM reservations r
+    JOIN rooms rm ON rm.id = r.room_id
+    WHERE r.guest_id = ?
+    ORDER BY COALESCE(NULLIF(r.actual_check_in_at, ''), r.created_at) DESC, r.id DESC
+  `, [id]);
+}
+
 /**
  * Add a new guest / customer directly.
  * Accessible to both 'Admin' and 'User' roles.
@@ -354,6 +372,7 @@ function bulkImportGuests(guestsList) {
 module.exports = {
   getAllGuests,
   getGuestsPaginated,
+  getGuestReservationHistory,
   addCustomer,
   addGuest: addCustomer,
   setGuestBanStatus,

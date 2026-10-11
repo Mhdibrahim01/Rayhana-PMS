@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { assertDatabaseIntegrity, withSafeDatabase } = require('./helpers/safe-temp-db');
+const { addRoom } = require('./helpers/fixtures');
 
 test('guest validation, imports, bans, search, and pagination', async t => {
   await withSafeDatabase(async (db, connection) => {
@@ -61,6 +62,35 @@ test('guest validation, imports, bans, search, and pagination', async t => {
       assert.equal(search.pagination.totalCount, 1);
       assert.equal(search.data[0].name, 'ضيف الاستيراد العربي');
       assertDatabaseIntegrity(connection, 'guest search and pagination');
+    });
+    await t.test('reservation history returns every status for only the requested guest', () => {
+      const firstRoom = addRoom('GUEST-HISTORY-1');
+      const secondRoom = addRoom('GUEST-HISTORY-2');
+      const otherRoom = addRoom('GUEST-HISTORY-3');
+      const sharedGuest = {
+        guestName: 'Guest With History',
+        guestPhone: '0500000711',
+        guestIdNumber: '1000000711'
+      };
+      const completedId = db.createReservation({
+        ...sharedGuest, roomId: firstRoom.id, checkInDate: '2026-01-01', checkOutDate: '2026-01-02', totalPrice: 200, paidAmount: 200
+      }).reservationId;
+      const cancelledId = db.createReservation({
+        ...sharedGuest, roomId: secondRoom.id, checkInDate: '2026-02-01', checkOutDate: '2026-02-02', totalPrice: 200
+      }).reservationId;
+      db.createReservation({
+        guestName: 'Different Guest', guestPhone: '0500000712', guestIdNumber: '1000000712',
+        roomId: otherRoom.id, checkInDate: '2026-03-01', checkOutDate: '2026-03-02', totalPrice: 200
+      });
+      connection.db.run("UPDATE reservations SET status = 'مكتمل' WHERE id = ?", [completedId]);
+      connection.db.run("UPDATE reservations SET status = 'ملغي' WHERE id = ?", [cancelledId]);
+
+      const guestId = connection.queryOne('SELECT id FROM guests WHERE phone = ?', [sharedGuest.guestPhone]).id;
+      const history = db.getGuestReservationHistory(guestId);
+      assert.deepEqual(new Set(history.map(reservation => reservation.id)), new Set([completedId, cancelledId]));
+      assert.deepEqual(new Set(history.map(reservation => reservation.status)), new Set(['مكتمل', 'ملغي']));
+      assert.throws(() => db.getGuestReservationHistory('invalid'), /معرف النزيل غير صالح/);
+      assertDatabaseIntegrity(connection, 'guest reservation history');
     });
   });
 });
