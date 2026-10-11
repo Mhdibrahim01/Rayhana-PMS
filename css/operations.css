@@ -1949,6 +1949,26 @@
   max-height: calc(100vh - 24px) !important;
 }
 
+#invoice-printable-area {
+  position: relative;
+  z-index: 0;
+}
+
+#invoice-print-footer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  pointer-events: auto;
+}
+
+#btn-trigger-print-invoice {
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
 #room-revenue-modal > .modal-layout {
   width: min(840px, 94vw) !important;
   max-width: 840px !important;
