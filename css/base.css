@@ -143,10 +143,23 @@ body {
   100% { transform: translate(50px, -30px) scale(0.96); }
 }
 
+/* ── Dedicated Native Window Titlebar Strip (Clean White & Transparent) ── */
+.window-titlebar-strip {
+  height: 32px;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+  display: block;
+  -webkit-app-region: drag;
+  user-select: none;
+  flex-shrink: 0;
+  z-index: 1000;
+  position: relative;
+}
+
 .dashboard-layout {
   position: relative;
   display: flex;
-  height: 100vh;
+  height: calc(100vh - 32px);
   overflow: hidden;
   /* Light airy mesh background: Pure white + soft slate + mint */
   background: 

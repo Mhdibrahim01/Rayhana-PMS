@@ -725,3 +725,29 @@ textarea:focus-visible {
   }
 }
 
+/* ── Window Controls Overlay & Drag Support ──────────────────────────────── */
+.topbar, .drag-region {
+  -webkit-app-region: drag;
+}
+
+.topbar button,
+.topbar input,
+.topbar select,
+.topbar a,
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ── Dedicated Native Window Titlebar Strip (Clean White & Transparent) ── */
+.window-titlebar-strip {
+  height: 32px;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+  display: block;
+  -webkit-app-region: drag;
+  user-select: none;
+  flex-shrink: 0;
+  z-index: 9999;
+  position: relative;
+}
+

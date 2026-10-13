@@ -10,6 +10,7 @@ const registerReservationsIpc = require('./reservations');
 const registerGuestsIpc = require('./guests');
 const registerReportsIpc = require('./reports');
 const registerSystemIpc = require('./system');
+const registerAppLockIpc = require('./app-lock');
 
 /**
  * Registers all domain IPC handlers on the electron ipcMain instance.
@@ -17,6 +18,7 @@ const registerSystemIpc = require('./system');
  * @param {Object} deps Application dependencies and live session wrappers
  */
 function registerAllIpcHandlers(ipcMain, deps) {
+  registerAppLockIpc(ipcMain, deps);
   registerAuthIpc(ipcMain, deps);
   registerUsersIpc(ipcMain, deps);
   registerRoomsIpc(ipcMain, deps);
@@ -28,6 +30,7 @@ function registerAllIpcHandlers(ipcMain, deps) {
 
 module.exports = {
   registerAllIpcHandlers,
+  registerAppLockIpc,
   registerAuthIpc,
   registerUsersIpc,
   registerRoomsIpc,

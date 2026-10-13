@@ -103,5 +103,12 @@ contextBridge.exposeInMainWorld('api', {
   updateReservationReceipt: (data) => ipcRenderer.invoke('reservations:update-receipt', data),
   printToPdf: (options) => ipcRenderer.invoke('print:to-pdf', options),
   openPrintPreviewWindow: (options) => ipcRenderer.invoke('print:open-preview-window', options),
-  openWhatsApp: (url) => ipcRenderer.invoke('open-whatsapp', url)
+  openWhatsApp: (url) => ipcRenderer.invoke('open-whatsapp', url),
+
+  // App Lock (Master Passcode Gate)
+  checkAppLockStatus: () => ipcRenderer.invoke('app-lock:status'),
+  setupAppLock: (password) => ipcRenderer.invoke('app-lock:setup', password),
+  unlockApp: (password) => ipcRenderer.invoke('app-lock:verify', password),
+  resetAppLockWithDefault: (data) => ipcRenderer.invoke('app-lock:reset-with-default', data),
+  exitApp: () => ipcRenderer.invoke('app-lock:exit')
 });

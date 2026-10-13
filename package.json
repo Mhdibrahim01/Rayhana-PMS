@@ -36,11 +36,13 @@
   "build": {
     "appId": "com.rayhana.suites",
     "productName": "Rayhana Suites",
+    "copyright": "Copyright © 2026 Rayhana Management. All rights reserved.",
     "directories": {
       "output": "dist"
     },
     "win": {
       "icon": "icon.ico",
+      "legalTrademarks": "Rayhana™",
       "target": [
         {
           "target": "nsis",
@@ -52,15 +54,17 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Rayhana Suites",
-      "uninstallDisplayName": "Rayhana Suites",
+      "uninstallDisplayName": "Rayhana Suites ERP",
       "installerIcon": "icon.ico",
       "uninstallerIcon": "icon.ico",
       "installerHeaderIcon": "icon.ico",
       "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
       "artifactName": "Rayhana-Suites-Setup-${version}.${ext}"
     },
     "files": [
@@ -73,6 +77,7 @@
       "businessDayScheduler.js",
       "icon.ico",
       "rayhana-logo.png",
+      "app-lock.html",
       "login.html",
       "login.js",
       "dashboard.html",

@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>بوابة الوصول الآمن | Secure Access</title>
+
+  <!-- Cairo Arabic Web Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Unified Design Tokens -->
+  <link rel="stylesheet" href="design-tokens.css">
+
+  <style>
+    body.lock-body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: var(--space-xl, 2rem);
+      background-color: var(--color-bg-app, #f1f5f9);
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(203, 213, 225, 0.5) 0%, transparent 45%),
+        radial-gradient(circle at 85% 15%, rgba(226, 232, 240, 0.6) 0%, transparent 40%),
+        radial-gradient(circle at 50% 85%, rgba(241, 245, 249, 0.95) 0%, transparent 55%),
+        linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%);
+      font-family: var(--font-family-sans, 'Cairo', sans-serif);
+      user-select: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Ambient Orbs */
+    .lock-orb {
+      position: fixed;
+      border-radius: var(--radius-pill, 9999px);
+      pointer-events: none;
+      filter: blur(80px);
+      z-index: 0;
+    }
+    .lock-orb-top {
+      top: -6rem;
+      left: -5rem;
+      width: 26rem;
+      height: 26rem;
+      background-color: rgba(100, 116, 139, 0.12);
+    }
+    .lock-orb-bottom {
+      bottom: -6rem;
+      right: -5rem;
+      width: 26rem;
+      height: 26rem;
+      background-color: rgba(71, 85, 105, 0.1);
+    }
+
+    /* Main Container Card */
+    .lock-container-card {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 440px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      border-radius: var(--radius-2xl, 24px);
+      box-shadow: 
+        0 20px 45px -15px rgba(15, 23, 42, 0.12),
+        0 0 0 1px rgba(15, 23, 42, 0.05);
+      padding: 2.5rem 2.25rem 2rem;
+      text-align: center;
+      animation: lock-card-appear 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes lock-card-appear {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* Anonymous Security Shield Icon */
+    .lock-shield-wrapper {
+      width: 74px;
+      height: 74px;
+      margin: 0 auto 1.35rem;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      border: 1px solid #cbd5e1;
+      box-shadow: 
+        0 10px 25px -5px rgba(15, 23, 42, 0.1),
+        inset 0 1px 1px #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .lock-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 0.35rem 0;
+      letter-spacing: -0.02em;
+    }
+
+    .lock-subtitle {
+      font-size: 0.88rem;
+      color: #64748b;
+      margin: 0 0 1.5rem 0;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+
+    /* Alert / Error Box */
+    .lock-alert-box {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius-md, 10px);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #991b1b;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-align: right;
+      animation: alert-shake 0.35s ease-in-out;
+    }
+
+    .lock-success-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+      border-radius: var(--radius-md, 10px);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    @keyframes alert-shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
+
+    /* Form Fields */
+    .lock-form-group {
+      margin-bottom: 1.15rem;
+      text-align: right;
+    }
+
+    .lock-label {
+      display: block;
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 0.45rem;
+    }
+
+    .lock-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .lock-input {
+      width: 100%;
+      height: 48px;
+      padding: 0 1rem 0 2.75rem;
+      border-radius: var(--radius-md, 10px);
+      border: 1.5px solid #cbd5e1;
+      background: #ffffff;
+      font-family: inherit;
+      font-size: 1rem;
+      color: #0f172a;
+      transition: all var(--motion-fast, 0.15s ease);
+      box-sizing: border-box;
+      outline: none;
+    }
+
+    .lock-input:focus {
+      border-color: #0f172a;
+      box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.12);
+    }
+
+    .lock-toggle-visibility {
+      position: absolute;
+      left: 10px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: color 0.15s;
+    }
+    .lock-toggle-visibility:hover {
+      color: #0f172a;
+    }
+
+    /* Action Buttons */
+    .lock-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      margin-top: 1.25rem;
+    }
+
+    .btn-lock-submit {
+      width: 100%;
+      height: 48px;
+      border-radius: var(--radius-md, 10px);
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 0.95rem;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.25);
+      transition: all var(--motion-fast, 0.15s ease);
+    }
+
+    .btn-lock-submit:hover:not(:disabled) {
+      background: #1e293b;
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .btn-lock-submit:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-lock-submit:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .btn-lock-exit {
+      background: none;
+      border: 1px solid #cbd5e1;
+      color: #64748b;
+      height: 40px;
+      border-radius: var(--radius-md, 10px);
+      font-weight: 700;
+      font-size: 0.86rem;
+      cursor: pointer;
+      transition: all var(--motion-fast, 0.15s ease);
+    }
+
+    .btn-lock-exit:hover {
+      background: #f8fafc;
+      color: #dc2626;
+      border-color: #fecaca;
+    }
+
+    /* Forgot Password Link */
+    .lock-forgot-wrapper {
+      margin-top: 0.85rem;
+      text-align: center;
+    }
+
+    .btn-forgot-link {
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color 0.15s;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .btn-forgot-link:hover {
+      color: #0f172a;
+    }
+
+    /* Footer Anonymous Notice */
+    .lock-footer {
+      margin-top: 1.5rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid #e2e8f0;
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+  </style>
+</head>
+<body class="lock-body">
+
+  <!-- Fixed Top Window Titlebar Strip (Clean Transparent, No Words) -->
+  <div class="window-titlebar-strip" style="position: fixed; top: 0; right: 0; left: 0; z-index: 9999; background: transparent; border: none;"></div>
+
+  <div class="lock-orb lock-orb-top" aria-hidden="true"></div>
+  <div class="lock-orb lock-orb-bottom" aria-hidden="true"></div>
+
+  <main class="lock-container-card" role="main">
+    
+    <!-- Neutral Security Shield Icon -->
+    <div class="lock-shield-wrapper" aria-hidden="true">
+      <svg width="34" height="34" fill="none" stroke="#0f172a" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        <circle cx="12" cy="11" r="2.5"></circle>
+        <path d="M12 13.5v3"></path>
+      </svg>
+    </div>
+
+    <!-- Anonymous Title & Subtitle -->
+    <h1 id="lock-title" class="lock-title">بوابة التحقق الآمن</h1>
+    <p id="lock-subtitle" class="lock-subtitle">أدخل رمز المرور المعتمد لمتابعة الوصول</p>
+
+    <!-- Error Alert Box -->
+    <div id="lock-error" class="lock-alert-box" style="display: none;" role="alert" aria-live="assertive">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      <span id="lock-error-text">رمز المرور غير صحيح.</span>
+    </div>
+
+    <!-- Success Message Box -->
+    <div id="lock-success" class="lock-success-box" style="display: none;" role="status">
+      <span id="lock-success-text">تم حفظ رمز المرور بنجاح.</span>
+    </div>
+
+    <!-- Mode 1: Daily Unlock Form -->
+    <form id="unlock-form" autocomplete="off">
+      <div class="lock-form-group">
+        <label for="app-password" class="lock-label">رمز المرور</label>
+        <div class="lock-input-wrapper">
+          <input 
+            type="password" 
+            id="app-password" 
+            required 
+            placeholder="أدخل رمز المرور" 
+            autocomplete="current-password" 
+            autofocus 
+            class="lock-input"
+          >
+          <button type="button" class="lock-toggle-visibility" id="btn-toggle-pass" aria-label="عرض الرمز">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="lock-actions">
+        <button type="submit" id="btn-unlock" class="btn-lock-submit">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+          </svg>
+          <span>متابعة الدخول</span>
+        </button>
+        <button type="button" id="btn-exit-app" class="btn-lock-exit">
+          إلغاء وإغلاق
+        </button>
+      </div>
+
+      <div class="lock-forgot-wrapper">
+        <button type="button" id="btn-show-forgot" class="btn-forgot-link">
+          نسيت رمز المرور؟
+        </button>
+      </div>
+    </form>
+
+    <!-- Mode 2: First Time Setup Form -->
+    <form id="setup-form" autocomplete="off" style="display: none;">
+      <div class="lock-form-group">
+        <label for="new-password" class="lock-label">إنشاء رمز مرور جديد للتطبيق</label>
+        <div class="lock-input-wrapper">
+          <input 
+            type="password" 
+            id="new-password" 
+            required 
+            placeholder="رمز المرور (4 خانات فأكثر)" 
+            class="lock-input"
+          >
+        </div>
+      </div>
+
+      <div class="lock-form-group">
+        <label for="confirm-password" class="lock-label">تأكيد رمز المرور</label>
+        <div class="lock-input-wrapper">
+          <input 
+            type="password" 
+            id="confirm-password" 
+            required 
+            placeholder="أعد إدخال رمز المرور" 
+            class="lock-input"
+          >
+        </div>
+      </div>
+
+      <div class="lock-actions">
+        <button type="submit" id="btn-save-setup" class="btn-lock-submit">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span>حفظ وتفعيل الرمز</span>
+        </button>
+      </div>
+    </form>
+
+    <!-- Mode 3: Forgot Password / Emergency Recovery Form -->
+    <form id="forgot-form" autocomplete="off" style="display: none;">
+      <div class="lock-form-group">
+        <label for="default-recovery-pass" class="lock-label">رمز الطوارئ المعتمد</label>
+        <div class="lock-input-wrapper">
+          <input 
+            type="password" 
+            id="default-recovery-pass" 
+            required 
+            placeholder="أدخل رمز الاستعادة الافتراضي" 
+            class="lock-input"
+          >
+        </div>
+      </div>
+
+      <div class="lock-form-group">
+        <label for="reset-new-password" class="lock-label">رمز المرور الجديد</label>
+        <div class="lock-input-wrapper">
+          <input 
+            type="password" 
+            id="reset-new-password" 
+            required 
+            placeholder="أدخل رمزاً جديداً (4 خانات فأكثر)" 
+            class="lock-input"
+          >
+        </div>
+      </div>
+
+      <div class="lock-actions">
+        <button type="submit" id="btn-submit-reset" class="btn-lock-submit">
+          <span>استعادة وتعيين الرمز الجديد</span>
+        </button>
+        <button type="button" id="btn-cancel-forgot" class="btn-lock-exit">
+          العودة لشاشة الدخول
+        </button>
+      </div>
+    </form>
+
+    <!-- Security Notice Footer -->
+    <footer class="lock-footer">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+      <span>نظام مشفّر • التحقق الأمني المعتمد</span>
+    </footer>
+
+  </main>
+
+  <script>
+    (function() {
+      'use strict';
+
+      const lockTitle = document.getElementById('lock-title');
+      const lockSubtitle = document.getElementById('lock-subtitle');
+      const unlockForm = document.getElementById('unlock-form');
+      const setupForm = document.getElementById('setup-form');
+      const forgotForm = document.getElementById('forgot-form');
+
+      const appPasswordInput = document.getElementById('app-password');
+      const newPasswordInput = document.getElementById('new-password');
+      const confirmPasswordInput = document.getElementById('confirm-password');
+      const defaultRecoveryInput = document.getElementById('default-recovery-pass');
+      const resetNewPasswordInput = document.getElementById('reset-new-password');
+
+      const errorBox = document.getElementById('lock-error');
+      const errorText = document.getElementById('lock-error-text');
+      const successBox = document.getElementById('lock-success');
+      const successText = document.getElementById('lock-success-text');
+
+      const btnUnlock = document.getElementById('btn-unlock');
+      const btnSaveSetup = document.getElementById('btn-save-setup');
+      const btnExitApp = document.getElementById('btn-exit-app');
+      const btnTogglePass = document.getElementById('btn-toggle-pass');
+      const btnShowForgot = document.getElementById('btn-show-forgot');
+      const btnCancelForgot = document.getElementById('btn-cancel-forgot');
+      const btnSubmitReset = document.getElementById('btn-submit-reset');
+
+      function showError(msg) {
+        if (!errorBox) return;
+        if (successBox) successBox.style.display = 'none';
+        errorText.textContent = msg;
+        errorBox.style.display = 'flex';
+        errorBox.classList.remove('lock-alert-box');
+        void errorBox.offsetWidth;
+        errorBox.classList.add('lock-alert-box');
+      }
+
+      function showSuccess(msg) {
+        if (!successBox) return;
+        if (errorBox) errorBox.style.display = 'none';
+        successText.textContent = msg;
+        successBox.style.display = 'block';
+      }
+
+      function hideAlerts() {
+        if (errorBox) errorBox.style.display = 'none';
+        if (successBox) successBox.style.display = 'none';
+      }
+
+      // Password visibility toggle
+      if (btnTogglePass && appPasswordInput) {
+        btnTogglePass.addEventListener('click', () => {
+          const isPassword = appPasswordInput.type === 'password';
+          appPasswordInput.type = isPassword ? 'text' : 'password';
+        });
+      }
+
+      // Exit button
+      if (btnExitApp) {
+        btnExitApp.addEventListener('click', async () => {
+          if (window.api && window.api.exitApp) {
+            await window.api.exitApp();
+          } else {
+            window.close();
+          }
+        });
+      }
+
+      // Show forgot password form
+      if (btnShowForgot) {
+        btnShowForgot.addEventListener('click', () => {
+          hideAlerts();
+          unlockForm.style.display = 'none';
+          setupForm.style.display = 'none';
+          forgotForm.style.display = 'block';
+          lockTitle.textContent = 'استعادة رمز المرور';
+          lockSubtitle.textContent = 'أدخل رمز الطوارئ الافتراضي لتعيين رمز جديد';
+          if (defaultRecoveryInput) {
+            defaultRecoveryInput.value = '';
+            defaultRecoveryInput.focus();
+          }
+          if (resetNewPasswordInput) resetNewPasswordInput.value = '';
+        });
+      }
+
+      // Cancel forgot password
+      if (btnCancelForgot) {
+        btnCancelForgot.addEventListener('click', () => {
+          hideAlerts();
+          forgotForm.style.display = 'none';
+          unlockForm.style.display = 'block';
+          lockTitle.textContent = 'بوابة التحقق الآمن';
+          lockSubtitle.textContent = 'أدخل رمز المرور المعتمد لمتابعة الوصول';
+          if (appPasswordInput) appPasswordInput.focus();
+        });
+      }
+
+      // Check configured status
+      async function checkStatus() {
+        hideAlerts();
+        try {
+          if (!window.api || !window.api.checkAppLockStatus) {
+            return;
+          }
+          const { isConfigured } = await window.api.checkAppLockStatus();
+          if (isConfigured) {
+            unlockForm.style.display = 'block';
+            setupForm.style.display = 'none';
+            forgotForm.style.display = 'none';
+            lockTitle.textContent = 'بوابة التحقق الآمن';
+            lockSubtitle.textContent = 'أدخل رمز المرور المعتمد لمتابعة الوصول';
+            if (appPasswordInput) appPasswordInput.focus();
+          } else {
+            // First time setup mode
+            unlockForm.style.display = 'none';
+            setupForm.style.display = 'block';
+            forgotForm.style.display = 'none';
+            lockTitle.textContent = 'تعيين رمز المرور';
+            lockSubtitle.textContent = 'يرجى تعيين رمز مرور للتطبيق لأول مرة قبل المتابعة';
+            if (newPasswordInput) newPasswordInput.focus();
+          }
+        } catch (err) {
+          console.error('[Lock Screen Error]:', err);
+          showError('حدث خطأ أثناء فحص حالة الأمان');
+        }
+      }
+
+      // Handle Unlock Submit (Accepts Custom Passcode OR Default Recovery Passcode)
+      if (unlockForm) {
+        unlockForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          hideAlerts();
+          const pass = appPasswordInput.value;
+          if (!pass) return;
+
+          btnUnlock.disabled = true;
+          const origHtml = btnUnlock.innerHTML;
+          btnUnlock.innerHTML = '<span>جاري التحقق...</span>';
+
+          try {
+            const res = await window.api.unlockApp(pass);
+            if (!res.success) {
+              showError(res.message || 'رمز المرور غير صحيح');
+              btnUnlock.disabled = false;
+              btnUnlock.innerHTML = origHtml;
+              appPasswordInput.value = '';
+              appPasswordInput.focus();
+            }
+          } catch (err) {
+            console.error('[Unlock Error]:', err);
+            showError('تعذر التحقق من رمز المرور');
+            btnUnlock.disabled = false;
+            btnUnlock.innerHTML = origHtml;
+          }
+        });
+      }
+
+      // Handle First Time Setup Submit
+      if (setupForm) {
+        setupForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          hideAlerts();
+          const p1 = newPasswordInput.value;
+          const p2 = confirmPasswordInput.value;
+
+          if (!p1 || p1.length < 4) {
+            showError('يجب أن لا يقل رمز المرور عن 4 خانات');
+            return;
+          }
+          if (p1 !== p2) {
+            showError('الرمزان غير متطابقين');
+            return;
+          }
+
+          btnSaveSetup.disabled = true;
+          btnSaveSetup.innerHTML = '<span>جاري الحفظ...</span>';
+
+          try {
+            const res = await window.api.setupAppLock(p1);
+            if (res.success) {
+              await window.api.unlockApp(p1);
+            } else {
+              showError(res.message || 'فشل حفظ رمز المرور');
+              btnSaveSetup.disabled = false;
+              btnSaveSetup.innerHTML = '<span>حفظ وتفعيل الرمز</span>';
+            }
+          } catch (err) {
+            console.error('[Setup Error]:', err);
+            showError('حدث خطأ أثناء حفظ رمز المرور');
+            btnSaveSetup.disabled = false;
+          }
+        });
+      }
+
+      // Handle Emergency Recovery Reset Submit
+      if (forgotForm) {
+        forgotForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          hideAlerts();
+
+          const defaultPass = defaultRecoveryInput.value;
+          const newPass = resetNewPasswordInput.value;
+
+          if (!defaultPass) {
+            showError('يرجى إدخال رمز الطوارئ الافتراضي');
+            return;
+          }
+          if (!newPass || newPass.length < 4) {
+            showError('رمز المرور الجديد يجب أن لا يقل عن 4 خانات');
+            return;
+          }
+
+          btnSubmitReset.disabled = true;
+          btnSubmitReset.innerHTML = '<span>جاري الاستعادة...</span>';
+
+          try {
+            const res = await window.api.resetAppLockWithDefault({
+              defaultPassword: defaultPass,
+              newPassword: newPass
+            });
+
+            if (res.success) {
+              showSuccess('تم تحديث رمز المرور بنجاح! جاري الدخول...');
+              setTimeout(async () => {
+                await window.api.unlockApp(newPass);
+              }, 800);
+            } else {
+              showError(res.message || 'رمز الطوارئ الافتراضي غير صحيح');
+              btnSubmitReset.disabled = false;
+              btnSubmitReset.innerHTML = '<span>استعادة وتعيين الرمز الجديد</span>';
+            }
+          } catch (err) {
+            console.error('[Reset Error]:', err);
+            showError('تعذر استعادة رمز المرور');
+            btnSubmitReset.disabled = false;
+            btnSubmitReset.innerHTML = '<span>استعادة وتعيين الرمز الجديد</span>';
+          }
+        });
+      }
+
+      document.addEventListener('DOMContentLoaded', checkStatus);
+    })();
+  </script>
+</body>
+</html>
