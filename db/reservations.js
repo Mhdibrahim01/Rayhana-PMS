@@ -300,7 +300,7 @@ function getReservationsPage({ page = 1, pageSize = 50, search = '', status = 'a
       SUM(CASE WHEN r.status = 'مكتمل' THEN 1 ELSE 0 END) AS completedCount,
       SUM(CASE WHEN r.status IN ('ملغي', 'ملغي جزئي') THEN 1 ELSE 0 END) AS cancelledCount,
       SUM(CASE
-        WHEN r.status = 'مؤكد' AND r.total_price > COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount, 0)
+        WHEN r.status IN ('مؤكد', 'مكتمل') AND r.status NOT IN ('ملغي', 'ملغي جزئي') AND r.total_price > COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount, 0)
         THEN (r.total_price - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id), r.paid_amount, 0))
         ELSE 0
       END) AS dueAmount
@@ -1746,7 +1746,16 @@ function extendReservation({
   }
 
   // Calculate additional cost using custom rate if specified, otherwise existing custom or room rate
-  const normCustomNightlyPrice = res.booking_type === 'حجز شهري'
+  const isMonthly = res.booking_type === 'حجز شهري';
+  const monthlyRate = isMonthly
+    ? ((Number(res.monthly_rate_snapshot) > 0)
+      ? Number(res.monthly_rate_snapshot)
+      : (Number(res.monthly_price) > 0
+        ? Number(res.monthly_price)
+        : roundMoney((res.price_per_night || 0) * 30)))
+    : null;
+
+  const normCustomNightlyPrice = isMonthly
     ? roundMoney(res.price_per_night || 0)
     : ((customNightlyPrice !== undefined && customNightlyPrice !== null && customNightlyPrice !== '' && !isNaN(Number(customNightlyPrice)))
       ? roundMoney(customNightlyPrice)
@@ -1770,14 +1779,25 @@ function extendReservation({
     ? Math.max(0, roundMoney(discountAmount))
     : 0;
 
-  const baseCost = roundMoney(extraNights * normCustomNightlyPrice);
-  const calculatedCost = Math.max(0, roundMoney(baseCost - normDiscountAmount));
+  let baseCost;
+  if (isMonthly && monthlyRate > 0) {
+    if (cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut)) {
+      baseCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)))
+        ? roundMoney(additionalCost)
+        : monthlyRate;
+    } else if (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost))) {
+      baseCost = roundMoney(additionalCost);
+    } else {
+      baseCost = roundMoney(extraNights * (res.price_per_night || roundMoney(monthlyRate / 30)));
+    }
+  } else {
+    baseCost = roundMoney(extraNights * normCustomNightlyPrice);
+  }
 
-  const calcAdditionalCost = res.booking_type === 'حجز شهري'
-    ? calculatedCost
-    : ((additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)))
-      ? roundMoney(additionalCost)
-      : calculatedCost);
+  const calculatedCost = Math.max(0, roundMoney(baseCost - normDiscountAmount));
+  const calcAdditionalCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)) && (!isMonthly || cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut)))
+    ? roundMoney(additionalCost)
+    : calculatedCost;
 
   // Check room availability for the extension period (oldCheckOut to cleanNewCheckOut)
   const conflict = queryOne(`
@@ -1865,7 +1885,7 @@ function extendReservation({
           monthly_extension_amount = CASE WHEN booking_type = 'حجز شهري' THEN COALESCE(monthly_extension_amount, 0) + ? ELSE monthly_extension_amount END
       WHERE id = ?
     `);
-    stmt.run([cleanNewCheckOut, newTotal, newPaid, newPaymentStatus, updatedCustomRate, newCumulativeDiscount, res.booking_type === 'حجز شهري' ? baseCost : 0, targetId]);
+    stmt.run([cleanNewCheckOut, newTotal, newPaid, newPaymentStatus, updatedCustomRate, newCumulativeDiscount, res.booking_type === 'حجز شهري' ? calcAdditionalCost : 0, targetId]);
     stmt.free();
 
     db.run("COMMIT;");
@@ -1895,12 +1915,12 @@ function extendReservation({
   }
 }
 
-function cancelReservation(reservationId, actualDepartureDate = null, manualOverrideAmount = undefined, userId = null) {
+function cancelReservation(reservationId, actualDepartureDate = null, manualOverrideAmount = undefined, userId = null, refundPaymentMethod = null) {
   const targetId = parseInt(reservationId, 10);
   if (!targetId || isNaN(targetId)) throw new Error('معرف الحجز غير صالح.');
 
   const res = queryOne(`
-    SELECT r.id, r.room_id, r.check_in_date, r.check_out_date, r.total_price, r.paid_amount,
+    SELECT r.id, r.room_id, r.payment_method, r.check_in_date, r.check_out_date, r.total_price, r.paid_amount,
            (SELECT SUM(p.amount) FROM payments p WHERE p.reservation_id = r.id) AS ledger_paid_amount,
            r.status,
            r.custom_nightly_price,
@@ -1927,6 +1947,14 @@ function cancelReservation(reservationId, actualDepartureDate = null, manualOver
   const paidAmount = roundMoney(hasLedger ? Number(res.ledger_paid_amount) : (res.paid_amount || 0));
   const depositLedger = getDepositLedger(targetId);
   let depositRefunded = 0;
+
+  const lastPositivePayment = queryOne(
+    "SELECT payment_method FROM payments WHERE reservation_id = ? AND amount > 0 ORDER BY id DESC LIMIT 1",
+    [targetId]
+  );
+  const effRefundMethod = (refundPaymentMethod && typeof refundPaymentMethod === 'string' && refundPaymentMethod.trim())
+    ? refundPaymentMethod.trim()
+    : (lastPositivePayment?.payment_method || res.payment_method || 'نقداً');
 
   let proRatedCharge = 0;
   let refundDue = 0;
@@ -1957,8 +1985,6 @@ function cancelReservation(reservationId, actualDepartureDate = null, manualOver
       // Record the full refund as a negative payment in the ledger so that revenue
       // reports (getDailyRevenueStats / getMonthlyRevenue / getShiftAuditReport) correctly
       // net down by the refunded amount on the day the refund is processed.
-      // NOTE: payment_method defaults to 'نقداً' — the cancellation flow does not currently
-      // collect the refund method from the UI. Extend the function signature if needed.
       if (refundDue > 0) {
         const refundReceiptNumber = generateReceiptNumber(targetId);
         const cancelNote = (today < res.check_in_date)
@@ -1972,7 +1998,7 @@ function cancelReservation(reservationId, actualDepartureDate = null, manualOver
           refundReceiptNumber,
           targetId,
           -refundDue,
-          'نقداً',
+          effRefundMethod,
           userId ? parseInt(userId, 10) : null,
           cancelNote
         ]);
@@ -1984,7 +2010,7 @@ function cancelReservation(reservationId, actualDepartureDate = null, manualOver
       if (depositRefunded > 0) {
         recordDepositMovement({
           reservationId: targetId, type: 'refunded', amount: depositRefunded,
-          paymentMethod: 'نقداً', userId,
+          paymentMethod: effRefundMethod, userId,
           reason: `رد التأمين عند إلغاء الحجز قبل الوصول #${targetId}`
         });
       }
@@ -2046,9 +2072,6 @@ function cancelReservation(reservationId, actualDepartureDate = null, manualOver
       // Record the refund as a negative payment in the ledger so that all revenue
       // reports (getDailyRevenueStats / getMonthlyRevenue / getShiftAuditReport),
       // which SUM payments.amount, correctly net down by the refunded amount.
-      // NOTE: payment_method defaults to 'نقداً' because the cancellation flow does
-      // not currently collect the refund method from the UI. If a non-cash refund is
-      // ever supported, this should be passed in via the function signature.
       if (refundDue > 0) {
         const refundReceiptNumber = generateReceiptNumber(targetId);
         const refundStmt = db.prepare(`
@@ -2059,7 +2082,7 @@ function cancelReservation(reservationId, actualDepartureDate = null, manualOver
           refundReceiptNumber,
           targetId,
           -refundDue,
-          'نقداً',
+          effRefundMethod,
           userId ? parseInt(userId, 10) : null,
           'استرداد نقدي - إلغاء جزئي #' + targetId
         ]);
@@ -2455,7 +2478,8 @@ function updateReservationReceipt({
   guestIdNumber,
   discountAmount,
   discountReason,
-  customNightlyPrice
+  customNightlyPrice,
+  userId = null
 }) {
   const targetId = parseInt(reservationId, 10);
   if (!targetId || isNaN(targetId)) {
@@ -2595,16 +2619,18 @@ function updateReservationReceipt({
       const receiptNumber = generateReceiptNumber(targetId);
       const isRefund = delta < 0;
       const paymentType = isRefund ? 'refund' : 'balance_payment';
+      const actingUserId = userId ? parseInt(userId, 10) : null;
       const insertPayStmt = db.prepare(`
         INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes)
-        VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), NULL, ?)
+        VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), ?, ?)
       `);
       insertPayStmt.run([
         receiptNumber, 
         targetId, 
         delta, // Will be negative if it's a refund
         method, 
-        paymentType, 
+        paymentType,
+        actingUserId,
         'تسوية رصيد من نافذة تعديل السند'
       ]);
       insertPayStmt.free();

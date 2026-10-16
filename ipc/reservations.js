@@ -481,7 +481,10 @@ module.exports = function registerReservationsIpc(ipcMain, { db, session, helper
       if (!session.currentUser || session.currentUser.role !== 'Admin') {
         return { success: false, error: 'Access Denied: Admin privileges required.' };
       }
-      const res = db.updateReservationReceipt(updateData);
+      const res = db.updateReservationReceipt({
+        ...updateData,
+        userId: session.currentUser ? session.currentUser.id : null
+      });
       return res;
     } catch (err) {
       return { success: false, error: err.message };
