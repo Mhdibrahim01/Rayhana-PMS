@@ -111,11 +111,14 @@ function applyBrand(targetBrandId) {
   const brandLogo = path.join(brandFolder, 'logo.png');
   const brandSeal = path.join(brandFolder, 'seal.svg');
   const brandSig = path.join(brandFolder, 'signature.svg');
+  const brandIcon = path.join(brandFolder, 'icon.ico');
 
   copyFileIfExists(brandLogo, path.join(rootAssets, 'logo.png'));
   copyFileIfExists(brandLogo, path.join(rootAssets, 'rayhana-logo.png'));
+  copyFileIfExists(brandLogo, path.join(ROOT_DIR, 'rayhana-logo.png'));
   copyFileIfExists(brandSeal, path.join(rootAssets, 'seal.svg'));
   copyFileIfExists(brandSig, path.join(rootAssets, 'signature.svg'));
+  copyFileIfExists(brandIcon, path.join(ROOT_DIR, 'icon.ico'));
 
   // 3. Update package.json product metadata
   if (fs.existsSync(PACKAGE_PATH)) {
@@ -123,7 +126,23 @@ function applyBrand(targetBrandId) {
     pkg.description = `${brand.nameAr} - ${brand.nameEn} ERP`;
     if (pkg.build) {
       pkg.build.productName = brand.nameEn;
-      pkg.build.appId = `com.rayhana.${targetBrandId}`;
+      pkg.build.appId = `com.hotel.${targetBrandId}`;
+      pkg.build.copyright = `Copyright © 2026 ${brand.companyAr || brand.nameEn}. All rights reserved.`;
+      if (pkg.build.win) {
+        pkg.build.win.legalTrademarks = `${brand.nameEn}™`;
+        pkg.build.win.icon = 'icon.ico';
+      }
+      if (pkg.build.nsis) {
+        pkg.build.nsis.shortcutName = brand.nameEn;
+        pkg.build.nsis.uninstallDisplayName = `${brand.nameEn} ERP`;
+        pkg.build.nsis.artifactName = '${productName}-Setup-${version}.${ext}';
+        pkg.build.nsis.installerIcon = 'icon.ico';
+        pkg.build.nsis.uninstallerIcon = 'icon.ico';
+        pkg.build.nsis.installerHeaderIcon = 'icon.ico';
+      }
+      if (Array.isArray(pkg.build.files) && !pkg.build.files.includes('config/**/*')) {
+        pkg.build.files.push('config/**/*');
+      }
     }
     fs.writeFileSync(PACKAGE_PATH, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
   }
@@ -159,10 +178,15 @@ function applyBrand(targetBrandId) {
   console.log(` VAT Number      : ${brand.vatNumber}`);
   console.log(` Reception Phone : ${brand.phone}`);
   console.log(` Primary Color   : ${brand.primaryColor}`);
-  console.log(' Root Assets     : logo.png, seal.svg, signature.svg synchronized.');
-  console.log(' Package.json    : productName & appId updated.');
+  console.log(' Root Assets     : logo.png, seal.svg, signature.svg, icon.ico synchronized.');
+  console.log(' Package.json    : productName, appId, icon & NSIS settings updated.');
   console.log('======================================================\n');
+  return brand;
 }
 
-const targetArg = process.argv[2];
-applyBrand(targetArg);
+module.exports = { applyBrand, loadBranding };
+
+if (require.main === module) {
+  const targetArg = process.argv[2];
+  applyBrand(targetArg);
+}

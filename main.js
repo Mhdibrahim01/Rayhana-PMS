@@ -290,7 +290,19 @@ function registerIpcHandlers() {
 }
 
 // Set Windows Application User Model ID for pinned taskbar grouping and branding
-app.setAppUserModelId('com.rayhana.suites');
+try {
+  const bPath = path.join(__dirname, 'config', 'branding.json');
+  let appId = 'com.rayhana.suites';
+  if (fs.existsSync(bPath)) {
+    const bCfg = JSON.parse(fs.readFileSync(bPath, 'utf8'));
+    if (bCfg && bCfg.activeBrand) {
+      appId = `com.hotel.${bCfg.activeBrand}`;
+    }
+  }
+  app.setAppUserModelId(appId);
+} catch (_) {
+  app.setAppUserModelId('com.rayhana.suites');
+}
 
 // Enforce single instance lock to prevent concurrent database access conflicts
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
