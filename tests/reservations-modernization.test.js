@@ -58,19 +58,34 @@ test('reservations modernization: summary statistics, filters, and sorting', asy
       paymentMethod: 'بطاقة / مدى'
     });
 
+    // In afternoon (>= 14:00), departures today are also classified as late per hotel policy
+    const isAfternoonLate = (() => {
+      try {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Riyadh',
+          hour: '2-digit', hourCycle: 'h23'
+        }).formatToParts(new Date());
+        const hourPart = parts.find(x => x.type === 'hour');
+        return Number(hourPart?.value || 0) >= 14;
+      } catch (_) {
+        return new Date().getHours() >= 14;
+      }
+    })();
+    const expectedLateCount = isAfternoonLate ? 2 : 1;
+
     // Test summary data
     const pageAll = db.getReservationsPage({ page: 1, pageSize: 50 });
     assert.ok(pageAll.summary, 'Summary object must exist in getReservationsPage result');
     assert.equal(pageAll.summary.total, 3);
     assert.equal(pageAll.summary.activeCount, 3);
-    assert.equal(pageAll.summary.lateCount, 1, 'res2 should be counted as late');
+    assert.equal(pageAll.summary.lateCount, expectedLateCount, 'lateCount should reflect late policy accurately');
     assert.equal(pageAll.summary.todayCount, 2, 'res1 (arriving today) and res3 (departing today) should be counted');
     assert.equal(pageAll.summary.dueAmount, 450, 'res2 due: 200 + res3 due: 250 = 450');
 
     // Test status filters
     const pageLate = db.getReservationsPage({ status: 'late' });
-    assert.equal(pageLate.total, 1);
-    assert.equal(pageLate.rows[0].id, res2.reservationId);
+    assert.equal(pageLate.total, expectedLateCount);
+    assert.ok(pageLate.rows.some(r => r.id === res2.reservationId), 'res2 must be in late reservations');
 
     const pageToday = db.getReservationsPage({ status: 'today' });
     assert.equal(pageToday.total, 2);

@@ -1144,6 +1144,13 @@
       return;
     }
 
+    const submitBtn = reservationForm.querySelector('button[type="submit"]');
+    const originalSubmitHtml = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>جارٍ تأكيد الحجز...</span>';
+    }
+
     try {
       let res = await window.api.createReservation({
         guestName,
@@ -1258,6 +1265,11 @@
       }
     } catch (err) {
       showToast(`خطأ: ${err.message}`, 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalSubmitHtml;
+      }
     }
   });
 
@@ -3150,6 +3162,10 @@
       });
       if (!confirmed) return;
 
+      const originalText = btnCheckoutWithoutSettle.innerHTML;
+      btnCheckoutWithoutSettle.disabled = true;
+      btnCheckoutWithoutSettle.innerHTML = '<span>جارٍ المغادرة...</span>';
+
       try {
         const payload = isContract
           ? { finalTotalPrice: finalTotal, settleAmount: 0, discountAmount: discAmount, discountReason: discReason, notes: 'تسجيل مغادرة بدون تحصيل (آجل)' }
@@ -3174,6 +3190,9 @@
         }
       } catch (err) {
         showToast(`خطأ: ${err.message}`, 'error');
+      } finally {
+        btnCheckoutWithoutSettle.disabled = false;
+        btnCheckoutWithoutSettle.innerHTML = originalText;
       }
     });
   }
