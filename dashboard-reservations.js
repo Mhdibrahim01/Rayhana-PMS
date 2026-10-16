@@ -3355,6 +3355,7 @@
     const dOld = new Date(oldDateStr + 'T00:00:00');
     const dNew = new Date(newDateStr + 'T00:00:00');
     const diffTime = dNew.getTime() - dOld.getTime();
+    currentCalcExtraNights = Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
     const monthlyRate = Number(currentExtendingReservation.monthly_rate_snapshot) > 0
       ? Number(currentExtendingReservation.monthly_rate_snapshot)
       : (Number(currentExtendingReservation.monthly_price) > 0
