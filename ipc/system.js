@@ -7,19 +7,29 @@ const path = require('path');
 const fs = require('fs');
 function toDataUrl(file) {
   try {
-    const buf = fs.readFileSync(path.join(__dirname, '../assets', file));
-    return 'data:image/svg+xml;base64,' + buf.toString('base64');
+    const rel = file.startsWith('assets') ? file : path.join('assets', file);
+    const fullPath = path.isAbsolute(file) ? file : path.join(__dirname, '..', rel);
+    if (fs.existsSync(fullPath)) {
+      const buf = fs.readFileSync(fullPath);
+      const ext = path.extname(fullPath).toLowerCase();
+      const mime = ext === '.svg' ? 'image/svg+xml' : (ext === '.png' ? 'image/png' : 'image/jpeg');
+      return `data:${mime};base64,` + buf.toString('base64');
+    }
   } catch (err) {
     console.error('Failed to load asset:', file, err.message);
-    return '';
   }
+  return '';
 }
 const sealUrl = toDataUrl('seal.svg');
 const signatureUrl = toDataUrl('signature.svg');
 function embedAssets(html) {
-  return html
-    .replace(/assets\/seal\.svg/g, sealUrl)
-    .replace(/assets\/signature\.svg/g, signatureUrl);
+  if (!html) return '';
+  return html.replace(/src=["'](assets\/[^"']+)["']/g, (match, assetPath) => {
+    const dataUrl = toDataUrl(assetPath);
+    return dataUrl ? `src="${dataUrl}"` : match;
+  })
+  .replace(/assets\/seal\.svg/g, sealUrl)
+  .replace(/assets\/signature\.svg/g, signatureUrl);
 }
 module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialog, shell, db, backupScheduler, session, helpers }) {
   // 8. System Info & Database Path

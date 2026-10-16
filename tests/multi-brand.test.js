@@ -1,0 +1,131 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const BRANDING_PATH = path.join(__dirname, '..', 'config', 'branding.json');
+const ROOT_DIR = path.join(__dirname, '..');
+
+test('Multi-Brand Configuration & Profiles Integrity', async (t) => {
+  await t.test('branding.json exists and contains 3 distinct hotel brands', () => {
+    assert.ok(fs.existsSync(BRANDING_PATH), 'branding.json should exist');
+    const config = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
+
+    assert.ok(config.brands, 'config.brands must exist');
+    assert.ok(config.brands.hotel_1, 'hotel_1 must exist');
+    assert.ok(config.brands.hotel_2, 'hotel_2 must exist');
+    assert.ok(config.brands.hotel_3, 'hotel_3 must exist');
+    assert.ok(['hotel_1', 'hotel_2', 'hotel_3'].includes(config.activeBrand), 'activeBrand must be valid');
+  });
+
+  await t.test('each brand profile has complete required fields', () => {
+    const config = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
+    const requiredKeys = ['id', 'nameAr', 'nameEn', 'companyAr', 'crNumber', 'phone', 'logo', 'seal', 'signature'];
+
+    for (const [id, brand] of Object.entries(config.brands)) {
+      for (const key of requiredKeys) {
+        assert.ok(brand[key], `Brand [${id}] must have property ${key}`);
+      }
+    }
+  });
+
+  await t.test('each brand has corresponding asset files on disk', () => {
+    const config = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
+
+    for (const [id, brand] of Object.entries(config.brands)) {
+      const logoPath = path.join(ROOT_DIR, brand.logo);
+      const sealPath = path.join(ROOT_DIR, brand.seal);
+      const sigPath = path.join(ROOT_DIR, brand.signature);
+
+      assert.ok(fs.existsSync(logoPath), `Brand [${id}] logo must exist: ${brand.logo}`);
+      assert.ok(fs.existsSync(sealPath), `Brand [${id}] seal must exist: ${brand.seal}`);
+      assert.ok(fs.existsSync(sigPath), `Brand [${id}] signature must exist: ${brand.signature}`);
+
+      assert.ok(fs.statSync(logoPath).size > 0, `Logo file for [${id}] cannot be empty`);
+      assert.ok(fs.statSync(sealPath).size > 0, `Seal file for [${id}] cannot be empty`);
+      assert.ok(fs.statSync(sigPath).size > 0, `Signature file for [${id}] cannot be empty`);
+    }
+  });
+
+  await t.test('distinct properties between brands', () => {
+    const config = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
+    const h1 = config.brands.hotel_1;
+    const h2 = config.brands.hotel_2;
+    const h3 = config.brands.hotel_3;
+
+    assert.notEqual(h1.nameAr, h2.nameAr);
+    assert.notEqual(h2.nameAr, h3.nameAr);
+    assert.notEqual(h1.crNumber, h2.crNumber);
+    assert.notEqual(h2.crNumber, h3.crNumber);
+    assert.notEqual(h1.seal, h2.seal);
+    assert.notEqual(h2.seal, h3.seal);
+  });
+});
+
+test('Multi-Brand IPC Handlers & Access Control', async (t) => {
+  const registerBrandingIpc = require('../ipc/branding');
+
+  class FakeIpcMain {
+    constructor() {
+      this.handlers = new Map();
+    }
+    handle(channel, fn) {
+      this.handlers.set(channel, fn);
+    }
+    async invoke(channel, event, ...args) {
+      const fn = this.handlers.get(channel);
+      if (!fn) throw new Error(`No handler for channel ${channel}`);
+      return fn(event, ...args);
+    }
+  }
+
+  const fakeIpc = new FakeIpcMain();
+  const session = { currentUser: { id: 1, username: 'admin', role: 'Admin' } };
+  const fakeBrowserWindow = { getAllWindows: () => [] };
+
+  registerBrandingIpc(fakeIpc, { BrowserWindow: fakeBrowserWindow, session });
+
+  await t.test('brand:get-config returns active brand and catalog', async () => {
+    const res = await fakeIpc.invoke('brand:get-config', {});
+    assert.equal(res.success, true);
+    assert.ok(res.current);
+    assert.ok(res.brands);
+  });
+
+  await t.test('non-Admin role cannot switch active brand', async () => {
+    session.currentUser = { id: 2, username: 'receptionist', role: 'User' };
+    const res = await fakeIpc.invoke('brand:set-active', {}, 'hotel_2');
+    assert.equal(res.success, false);
+    assert.match(res.error, /غير مصرح/);
+  });
+
+  await t.test('non-Admin role cannot update brand profile', async () => {
+    session.currentUser = { id: 2, username: 'receptionist', role: 'User' };
+    const res = await fakeIpc.invoke('brand:update-profile', {}, { brandId: 'hotel_2', profile: { phone: '0599999999' } });
+    assert.equal(res.success, false);
+    assert.match(res.error, /غير مصرح/);
+  });
+
+  await t.test('Admin role can switch brand and update profile', async () => {
+    session.currentUser = { id: 1, username: 'admin', role: 'Admin' };
+    const originalConfig = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
+
+    try {
+      const switchRes = await fakeIpc.invoke('brand:set-active', {}, 'hotel_2');
+      assert.equal(switchRes.success, true);
+      assert.equal(switchRes.activeBrandId, 'hotel_2');
+
+      const updateRes = await fakeIpc.invoke('brand:update-profile', {}, {
+        brandId: 'hotel_2',
+        profile: { phone: '0500000002' }
+      });
+      assert.equal(updateRes.success, true);
+      assert.equal(updateRes.brands.hotel_2.phone, '0500000002');
+    } finally {
+      // Restore original config
+      fs.writeFileSync(BRANDING_PATH, JSON.stringify(originalConfig, null, 2), 'utf8');
+    }
+  });
+});

@@ -11,6 +11,7 @@ const registerGuestsIpc = require('./guests');
 const registerReportsIpc = require('./reports');
 const registerSystemIpc = require('./system');
 const registerAppLockIpc = require('./app-lock');
+const registerBrandingIpc = require('./branding');
 
 /**
  * Registers all domain IPC handlers on the electron ipcMain instance.
@@ -26,6 +27,7 @@ function registerAllIpcHandlers(ipcMain, deps) {
   registerGuestsIpc(ipcMain, deps);
   registerReportsIpc(ipcMain, deps);
   registerSystemIpc(ipcMain, deps);
+  registerBrandingIpc(ipcMain, deps);
 }
 
 module.exports = {
@@ -37,5 +39,6 @@ module.exports = {
   registerReservationsIpc,
   registerGuestsIpc,
   registerReportsIpc,
-  registerSystemIpc
+  registerSystemIpc,
+  registerBrandingIpc
 };

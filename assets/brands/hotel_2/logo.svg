@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="manarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f5132"/>
+      <stop offset="100%" stop-color="#0d7a5f"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded card -->
+  <rect width="400" height="400" rx="48" fill="url(#manarGrad)"/>
+
+  <!-- Geometric Luxury Border Accent -->
+  <rect x="24" y="24" width="352" height="352" rx="36" fill="none" stroke="url(#goldGrad)" stroke-width="3" opacity="0.45"/>
+
+  <!-- Central Emblem: Stylized Luxury Manar / Beacon -->
+  <g transform="translate(200, 155)">
+    <!-- Base Arch -->
+    <path d="M -60,50 L -60,0 C -60,-45 0,-75 0,-75 C 0,-75 60,-45 60,0 L 60,50 Z" fill="none" stroke="url(#goldGrad)" stroke-width="6" stroke-linejoin="round"/>
+    <!-- Inner Spire & Light rays -->
+    <path d="M 0,-60 L 0,40" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-75" r="9" fill="url(#goldGrad)"/>
+    <path d="M -30,20 L 0,-15 L 30,20" fill="none" stroke="url(#goldGrad)" stroke-width="4"/>
+    <circle cx="-75" cy="0" r="4" fill="url(#goldGrad)"/>
+    <circle cx="75" cy="0" r="4" fill="url(#goldGrad)"/>
+  </g>
+
+  <!-- Brand Typography -->
+  <text x="200" y="275" font-family="'Cairo', 'Segoe UI', Tahoma, sans-serif" font-weight="800" font-size="34" fill="#ffffff" text-anchor="middle" letter-spacing="1">أجنحة المنار</text>
+  <text x="200" y="315" font-family="'Cairo', 'Segoe UI', Tahoma, sans-serif" font-weight="600" font-size="16" fill="#fcd34d" text-anchor="middle">الفندقية</text>
+  <text x="200" y="348" font-family="'Montserrat', 'Arial', sans-serif" font-weight="700" font-size="13" fill="#a7f3d0" text-anchor="middle" letter-spacing="3">AL-MANAR HOTEL SUITES</text>
+</svg>

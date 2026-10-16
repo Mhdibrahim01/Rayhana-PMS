@@ -33,11 +33,11 @@
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="sidebar-logo" style="background: transparent; padding: 0; box-shadow: none;">
-          <img src="assets/rayhana-logo.png" alt="شعار ريحانة للوحدات السكنية" style="width: 42px; height: 42px; border-radius: 10px; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+          <img id="sidebar-brand-logo" src="assets/rayhana-logo.png" alt="شعار الفندق" style="width: 42px; height: 42px; border-radius: 10px; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
         </div>
         <div class="sidebar-title">
-          <h2>ريحانة للوحدات السكنية</h2>
-          <p>Rayhana Suites</p>
+          <h2 id="sidebar-brand-title">ريحانة للوحدات السكنية</h2>
+          <p id="sidebar-brand-subtitle">Rayhana Suites</p>
         </div>
       </div>
 
@@ -1062,6 +1062,93 @@
              ================================================================== -->
         <div id="view-admin" class="view-section" style="display: none;">
           <div style="display: flex; flex-direction: column; gap: 24px;">
+
+            <!-- Multi-Brand White-Label Customization Card -->
+            <section class="card brand-management-card" aria-labelledby="brand-management-title" style="background: rgba(255, 255, 255, 0.95); border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 16px; box-shadow: 0 10px 25px -4px rgba(15, 23, 42, 0.05); overflow: hidden;">
+              <div class="card-header" style="border-bottom: 1px solid #f1f5f9; padding: 18px 22px; background: rgba(255, 255, 255, 0.85); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div>
+                  <h2 id="brand-management-title" style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+                    <span>🏷️</span> إدارة الهوية والعلامة التجارية (Multi-Brand / White-Label)
+                  </h2>
+                  <p style="margin: 4px 0 0; font-size: 0.82rem; color: #64748b;">التبديل بين هويات الفنادق الثلاثة وتحديث بيانات الفاتورة والأختام والتواقيع المعتمدة.</p>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <label for="brand-selector" style="font-size: 0.85rem; font-weight: 700; color: #334155;">الهوية الحالية:</label>
+                  <select id="brand-selector" class="form-control" style="font-weight: 700; min-width: 240px; border: 2px solid #6366f1; border-radius: 8px;">
+                    <option value="hotel_1">ريحانة للوحدات السكنية (Rayhana Suites)</option>
+                    <option value="hotel_2">أجنحة المنار الفندقية (Al-Manar Hotel Suites)</option>
+                    <option value="hotel_3">دار الضيافة للشقق المخدومة (Dar Al-Diyafa)</option>
+                  </select>
+                  <button type="button" id="btn-activate-brand" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;">
+                    <span>✨</span> تفعيل الهوية
+                  </button>
+                </div>
+              </div>
+
+              <!-- Brand Live Preview & Details Grid -->
+              <div style="padding: 22px; display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start;">
+                <!-- Brand Visual Preview Card -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; text-align: center;">
+                  <div style="font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 12px;">معاينة الشعار والختم والتوقيع</div>
+                  <div style="margin-bottom: 14px;">
+                    <img id="brand-preview-logo" src="assets/rayhana-logo.png" alt="شعار الفندق" style="width: 80px; height: 80px; border-radius: 14px; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.12); border: 2px solid #ffffff;">
+                  </div>
+                  <h3 id="brand-preview-name" style="margin: 0 0 4px; font-size: 1.05rem; font-weight: 800; color: #1e293b;">ريحانة للوحدات السكنية</h3>
+                  <div id="brand-preview-company" style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">مؤسسة مكتب شمس المنازل للخدمات العقارية</div>
+                  <div style="display: flex; justify-content: space-around; align-items: center; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 10px;">
+                    <div>
+                      <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 4px;">الختم المعتمد</div>
+                      <img id="brand-preview-seal" src="assets/seal.svg" alt="ختم الفندق" style="height: 52px; object-fit: contain;">
+                    </div>
+                    <div>
+                      <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 4px;">توقيع الاستقبال</div>
+                      <img id="brand-preview-signature" src="assets/signature.svg" alt="توقيع الفندق" style="height: 38px; object-fit: contain;">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Editable Profile Form -->
+                <form id="brand-profile-edit-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                  <div class="form-group">
+                    <label for="brand-edit-name-ar" style="font-size: 0.82rem; font-weight: 700;">اسم المنشأة بالعربي</label>
+                    <input type="text" id="brand-edit-name-ar" class="form-control" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="brand-edit-name-en" style="font-size: 0.82rem; font-weight: 700;">اسم المنشأة بالإنجليزي</label>
+                    <input type="text" id="brand-edit-name-en" class="form-control" required dir="ltr">
+                  </div>
+                  <div class="form-group">
+                    <label for="brand-edit-company-ar" style="font-size: 0.82rem; font-weight: 700;">الاسم التجاري في العقد / المؤسسة</label>
+                    <input type="text" id="brand-edit-company-ar" class="form-control" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="brand-edit-cr" style="font-size: 0.82rem; font-weight: 700;">رقم السجل التجاري / الرقم الموحد</label>
+                    <input type="text" id="brand-edit-cr" class="form-control" required dir="ltr">
+                  </div>
+                  <div class="form-group">
+                    <label for="brand-edit-vat" style="font-size: 0.82rem; font-weight: 700;">الرقم الضريبي (VAT)</label>
+                    <input type="text" id="brand-edit-vat" class="form-control" dir="ltr">
+                  </div>
+                  <div class="form-group">
+                    <label for="brand-edit-phone" style="font-size: 0.82rem; font-weight: 700;">هاتف الاستقبال</label>
+                    <input type="text" id="brand-edit-phone" class="form-control" dir="ltr">
+                  </div>
+                  <div class="form-group">
+                    <label for="brand-edit-address" style="font-size: 0.82rem; font-weight: 700;">العنوان والمدينة</label>
+                    <input type="text" id="brand-edit-address" class="form-control">
+                  </div>
+                  <div class="form-group">
+                    <label for="brand-edit-postal" style="font-size: 0.82rem; font-weight: 700;">الرمز البريدي</label>
+                    <input type="text" id="brand-edit-postal" class="form-control" dir="ltr">
+                  </div>
+                  <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+                    <button type="submit" id="btn-save-brand-profile" class="btn btn-secondary" style="padding: 8px 20px; font-weight: 700;">
+                      💾 حفظ تعديلات الهوية
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </section>
 
             <section class="card business-day-settings-card" aria-labelledby="business-day-settings-title">
               <div class="card-header">

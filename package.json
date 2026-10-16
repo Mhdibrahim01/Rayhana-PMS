@@ -17,6 +17,7 @@
     "reset-db": "node reset-db.js",
     "seed:test-data": "node scripts/seed-scratch.js --include-future-cases",
     "import-guests": "node import-guests.js",
+    "brand": "node scripts/apply-brand.js",
     "build": "electron-builder --win",
     "builder": "electron-builder --win",
     "dist": "electron-builder --win",

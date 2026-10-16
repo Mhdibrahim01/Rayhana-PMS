@@ -4225,8 +4225,8 @@
       }
     } catch (err) {
       console.error('[Attention] Action failed:', err);
-      if (typeof showToast === 'function') {
-        showToast('تعذر إكمال الإجراء المطلوب: ' + err.message, 'error');
+      if (App?.Helpers?.showToast) {
+        App.Helpers.showToast('تعذر إكمال الإجراء المطلوب: ' + err.message, 'error');
       }
     }
   }

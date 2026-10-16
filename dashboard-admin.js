@@ -20,6 +20,7 @@
       console.error('Load users error:', err);
     }
     await loadBusinessDayAdminSettings();
+    await loadBrandAdminSettings();
   }
 
   async function loadBusinessDayAdminSettings() {
@@ -80,6 +81,59 @@
       }
     } catch (error) {
       console.warn('تعذر تحميل إعدادات اليوم الفندقي:', error);
+    }
+  }
+
+  function updateBrandPreviewAndInputs(brand) {
+    if (!brand) return;
+    const logoEl = document.getElementById('brand-preview-logo');
+    const nameEl = document.getElementById('brand-preview-name');
+    const compEl = document.getElementById('brand-preview-company');
+    const sealEl = document.getElementById('brand-preview-seal');
+    const sigEl = document.getElementById('brand-preview-signature');
+
+    if (logoEl && brand.logo) logoEl.src = brand.logo;
+    if (nameEl && brand.nameAr) nameEl.textContent = brand.nameAr;
+    if (compEl && brand.companyAr) compEl.textContent = brand.companyAr;
+    if (sealEl && brand.seal) sealEl.src = brand.seal;
+    if (sigEl && brand.signature) sigEl.src = brand.signature;
+
+    const inNameAr = document.getElementById('brand-edit-name-ar');
+    const inNameEn = document.getElementById('brand-edit-name-en');
+    const inComp = document.getElementById('brand-edit-company-ar');
+    const inCr = document.getElementById('brand-edit-cr');
+    const inVat = document.getElementById('brand-edit-vat');
+    const inPhone = document.getElementById('brand-edit-phone');
+    const inAddr = document.getElementById('brand-edit-address');
+    const inPost = document.getElementById('brand-edit-postal');
+
+    if (inNameAr) inNameAr.value = brand.nameAr || '';
+    if (inNameEn) inNameEn.value = brand.nameEn || '';
+    if (inComp) inComp.value = brand.companyAr || '';
+    if (inCr) inCr.value = brand.crNumber || '';
+    if (inVat) inVat.value = brand.vatNumber || '';
+    if (inPhone) inPhone.value = brand.phone || '';
+    if (inAddr) inAddr.value = brand.address || '';
+    if (inPost) inPost.value = brand.postalCode || '';
+  }
+
+  async function loadBrandAdminSettings() {
+    try {
+      if (!window.api || typeof window.api.getBrandingConfig !== 'function') return;
+      const res = await window.api.getBrandingConfig();
+      if (res && res.success) {
+        App.State.brands = res.brands || {};
+        App.State.activeBrandId = res.activeBrandId || 'hotel_1';
+        App.State.branding = res.current;
+
+        const selector = document.getElementById('brand-selector');
+        if (selector) {
+          selector.value = App.State.activeBrandId;
+        }
+        updateBrandPreviewAndInputs(res.current);
+      }
+    } catch (error) {
+      console.warn('تعذر تحميل إعدادات الهوية والعلامة التجارية:', error);
     }
   }
 
@@ -407,9 +461,91 @@
     });
   }
 
+  const brandSelector = document.getElementById('brand-selector');
+  if (brandSelector) {
+    brandSelector.addEventListener('change', () => {
+      const selectedId = brandSelector.value;
+      const brand = (App.State.brands && App.State.brands[selectedId]) || null;
+      if (brand) {
+        updateBrandPreviewAndInputs(brand);
+      }
+    });
+  }
+
+  const btnActivateBrand = document.getElementById('btn-activate-brand');
+  if (btnActivateBrand) {
+    btnActivateBrand.addEventListener('click', async () => {
+      const selector = document.getElementById('brand-selector');
+      const selectedId = selector ? selector.value : null;
+      if (!selectedId) return;
+
+      btnActivateBrand.disabled = true;
+      try {
+        const res = await window.api.setActiveBrand(selectedId);
+        if (res && res.success) {
+          App.State.activeBrandId = res.activeBrandId;
+          App.State.branding = res.current;
+          App.Helpers.applyBranding(res.current);
+          updateBrandPreviewAndInputs(res.current);
+          App.Helpers.showToast(`تم تفعيل هوية "${res.current.nameAr}" بنجاح!`, 'success');
+        } else {
+          App.Helpers.showToast(res?.error || 'فشل تفعيل الهوية.', 'error');
+        }
+      } catch (err) {
+        App.Helpers.showToast(`خطأ أثناء تفعيل الهوية: ${err.message}`, 'error');
+      } finally {
+        btnActivateBrand.disabled = false;
+      }
+    });
+  }
+
+  const brandProfileForm = document.getElementById('brand-profile-edit-form');
+  if (brandProfileForm) {
+    brandProfileForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const selector = document.getElementById('brand-selector');
+      const selectedId = selector ? selector.value : App.State.activeBrandId;
+      if (!selectedId) return;
+
+      const profile = {
+        nameAr: document.getElementById('brand-edit-name-ar')?.value?.trim(),
+        nameEn: document.getElementById('brand-edit-name-en')?.value?.trim(),
+        companyAr: document.getElementById('brand-edit-company-ar')?.value?.trim(),
+        crNumber: document.getElementById('brand-edit-cr')?.value?.trim(),
+        vatNumber: document.getElementById('brand-edit-vat')?.value?.trim(),
+        phone: document.getElementById('brand-edit-phone')?.value?.trim(),
+        address: document.getElementById('brand-edit-address')?.value?.trim(),
+        postalCode: document.getElementById('brand-edit-postal')?.value?.trim()
+      };
+
+      const btnSave = document.getElementById('btn-save-brand-profile');
+      if (btnSave) btnSave.disabled = true;
+
+      try {
+        const res = await window.api.updateBrandProfile({ brandId: selectedId, profile });
+        if (res && res.success) {
+          App.State.brands = res.brands;
+          if (res.activeBrandId === selectedId) {
+            App.State.branding = res.current;
+            App.Helpers.applyBranding(res.current);
+          }
+          updateBrandPreviewAndInputs(res.brands[selectedId]);
+          App.Helpers.showToast('تم حفظ تعديلات الهوية بنجاح!', 'success');
+        } else {
+          App.Helpers.showToast(res?.error || 'فشل حفظ بيانات الهوية.', 'error');
+        }
+      } catch (err) {
+        App.Helpers.showToast(`خطأ في حفظ البيانات: ${err.message}`, 'error');
+      } finally {
+        if (btnSave) btnSave.disabled = false;
+      }
+    });
+  }
+
   };
 
   App.Helpers.loadAdminData = loadAdminData;
   App.Helpers.loadBusinessDayAdminSettings = loadBusinessDayAdminSettings;
+  App.Helpers.loadBrandAdminSettings = loadBrandAdminSettings;
 
 })(window.DashboardApp);

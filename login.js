@@ -148,8 +148,29 @@
     });
   }
 
-  // Run unfreezing and reset immediately
+  async function applyLoginBranding() {
+    try {
+      if (window.api && typeof window.api.getBrandingConfig === 'function') {
+        const res = await window.api.getBrandingConfig();
+        if (res && res.current) {
+          const brand = res.current;
+          const logoEl = document.getElementById('login-brand-logo');
+          const titleEl = document.getElementById('login-brand-title');
+          const subEl = document.getElementById('login-brand-subtitle');
+          if (logoEl && brand.logo) logoEl.src = brand.logo;
+          if (titleEl && brand.nameAr) titleEl.textContent = brand.nameAr;
+          if (subEl) subEl.textContent = `${brand.nameEn || ''} • ${brand.subtitle || 'نظام إدارة الحجوزات الفندقية'}`;
+          document.title = `تسجيل الدخول | ${brand.nameAr} - ${brand.nameEn || ''}`;
+        }
+      }
+    } catch (err) {
+      console.warn('[Branding] Could not load login branding:', err);
+    }
+  }
+
+  // Run unfreezing, branding, and reset immediately
   unlockAndResetLoginForm();
+  applyLoginBranding();
   window.addEventListener('pageshow', unlockAndResetLoginForm);
 
   // Export helper
