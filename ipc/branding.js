@@ -66,6 +66,24 @@ const DEFAULT_BRANDING = {
       logo: 'assets/brands/hotel_3/logo.png',
       seal: 'assets/brands/hotel_3/seal.svg',
       signature: 'assets/brands/hotel_3/signature.svg'
+    },
+    hotel_4: {
+      id: 'hotel_4',
+      nameAr: 'أبراج الواحة للشقق الفندقية',
+      nameEn: 'Al-Waha Towers Hotel Apartments',
+      companyAr: 'مؤسسة أبراج الواحة للتشغيل الفندقي',
+      subtitle: 'أبراج فندقية بإطلالات مميزة وخدمة متكاملة',
+      crNumber: '7056891234',
+      vatNumber: '312987654300003',
+      address: 'الدمام - حي الشاطئ',
+      postalCode: '32415',
+      phone: '0543210987',
+      invoiceHeader: 'فاتورة ضريبية - أبراج الواحة للشقق الفندقية',
+      primaryColor: '#c2410c',
+      accentColor: '#f59e0b',
+      logo: 'assets/brands/hotel_4/logo.png',
+      seal: 'assets/brands/hotel_4/seal.svg',
+      signature: 'assets/brands/hotel_4/signature.svg'
     }
   }
 };

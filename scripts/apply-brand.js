@@ -36,6 +36,48 @@ function applyBrand(targetBrandId) {
   const config = loadBranding();
   const brands = config.brands || {};
 
+  if (targetBrandId === '--create' || targetBrandId === '-c') {
+    const newId = process.argv[3];
+    if (!newId) {
+      console.error('Usage: node scripts/apply-brand.js --create <brand_id> [Name_AR] [Name_EN]');
+      process.exit(1);
+    }
+    const nameAr = process.argv[4] || `فندق ${newId}`;
+    const nameEn = process.argv[5] || `${newId} Hotel`;
+    const targetFolder = path.join(ROOT_DIR, 'assets', 'brands', newId);
+    if (!fs.existsSync(targetFolder)) {
+      fs.mkdirSync(targetFolder, { recursive: true });
+    }
+    const baseFolder = path.join(ROOT_DIR, 'assets', 'brands', 'hotel_1');
+    copyFileIfExists(path.join(baseFolder, 'logo.png'), path.join(targetFolder, 'logo.png'));
+    copyFileIfExists(path.join(baseFolder, 'seal.svg'), path.join(targetFolder, 'seal.svg'));
+    copyFileIfExists(path.join(baseFolder, 'signature.svg'), path.join(targetFolder, 'signature.svg'));
+
+    config.brands[newId] = {
+      id: newId,
+      nameAr,
+      nameEn,
+      companyAr: nameAr,
+      subtitle: nameAr,
+      crNumber: '7000000000',
+      vatNumber: '300000000000003',
+      address: 'المملكة العربية السعودية',
+      postalCode: '10000',
+      phone: '0500000000',
+      invoiceHeader: `فاتورة ضريبية - ${nameAr}`,
+      primaryColor: '#2563eb',
+      accentColor: '#f59e0b',
+      logo: `assets/brands/${newId}/logo.png`,
+      seal: `assets/brands/${newId}/seal.svg`,
+      signature: `assets/brands/${newId}/signature.svg`
+    };
+    fs.writeFileSync(BRANDING_PATH, JSON.stringify(config, null, 2), 'utf8');
+    console.log(`\n✅ Brand [${newId}] created successfully!`);
+    console.log(` Assets initialized in: assets/brands/${newId}/`);
+    console.log(` You can customize them or edit details in config/branding.json\n`);
+    return;
+  }
+
   if (!targetBrandId || targetBrandId === '--list' || targetBrandId === '-l') {
     console.log('\n======================================================');
     console.log(' Available Hotel Brand Profiles:');
@@ -45,7 +87,9 @@ function applyBrand(targetBrandId) {
       console.log(` • [${id}] ${b.nameAr} | ${b.nameEn}${activeMark}`);
       console.log(`     CR: ${b.crNumber} | VAT: ${b.vatNumber} | Color: ${b.primaryColor}`);
     }
-    console.log('\nUsage: node scripts/apply-brand.js <brand_id>\n');
+    console.log('\nUsage:');
+    console.log('  node scripts/apply-brand.js <brand_id>');
+    console.log('  node scripts/apply-brand.js --create <new_brand_id> [Name_AR] [Name_EN]\n');
     return;
   }
 

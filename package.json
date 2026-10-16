@@ -1,7 +1,7 @@
 {
   "name": "rayhana-suites",
   "version": "2.0.0",
-  "description": "ريحانة للوحدات السكنية - Rayhana Residential Units ERP",
+  "description": "ريحانة للوحدات السكنية - Rayhana Suites ERP",
   "main": "main.js",
   "author": "Rayhana Management",
   "license": "MIT",
@@ -36,7 +36,7 @@
     "madge": "^8.0.0"
   },
   "build": {
-    "appId": "com.rayhana.suites",
+    "appId": "com.rayhana.hotel_1",
     "productName": "Rayhana Suites",
     "copyright": "Copyright © 2026 Rayhana Management. All rights reserved.",
     "directories": {

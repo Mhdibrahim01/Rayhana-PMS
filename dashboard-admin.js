@@ -127,7 +127,10 @@
         App.State.branding = res.current;
 
         const selector = document.getElementById('brand-selector');
-        if (selector) {
+        if (selector && res.brands) {
+          selector.innerHTML = Object.entries(res.brands).map(([id, b]) => {
+            return `<option value="${id}">${App.Helpers.escapeHtml(b.nameAr)} (${App.Helpers.escapeHtml(b.nameEn || id)})</option>`;
+          }).join('');
           selector.value = App.State.activeBrandId;
         }
         updateBrandPreviewAndInputs(res.current);

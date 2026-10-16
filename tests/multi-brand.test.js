@@ -9,7 +9,7 @@ const BRANDING_PATH = path.join(__dirname, '..', 'config', 'branding.json');
 const ROOT_DIR = path.join(__dirname, '..');
 
 test('Multi-Brand Configuration & Profiles Integrity', async (t) => {
-  await t.test('branding.json exists and contains 3 distinct hotel brands', () => {
+  await t.test('branding.json exists and contains configured distinct hotel brands', () => {
     assert.ok(fs.existsSync(BRANDING_PATH), 'branding.json should exist');
     const config = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
 
@@ -17,7 +17,8 @@ test('Multi-Brand Configuration & Profiles Integrity', async (t) => {
     assert.ok(config.brands.hotel_1, 'hotel_1 must exist');
     assert.ok(config.brands.hotel_2, 'hotel_2 must exist');
     assert.ok(config.brands.hotel_3, 'hotel_3 must exist');
-    assert.ok(['hotel_1', 'hotel_2', 'hotel_3'].includes(config.activeBrand), 'activeBrand must be valid');
+    assert.ok(config.brands.hotel_4, 'hotel_4 must exist');
+    assert.ok(Object.keys(config.brands).includes(config.activeBrand), 'activeBrand must be valid');
   });
 
   await t.test('each brand profile has complete required fields', () => {
