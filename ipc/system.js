@@ -200,6 +200,9 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
   });
 
   ipcMain.handle('backups:run-onedrive-backup', async () => {
+    if (!session.currentUser || session.currentUser.role !== 'Admin') {
+      return { success: false, error: 'غير مصرح: النسخ الاحتياطي يتطلب صلاحيات مدير النظام (Admin).' };
+    }
     return helpers.backupDatabase();
   });
 
@@ -345,8 +348,7 @@ await pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(embedAss
         backgroundColor: '#f8fafc',
         webPreferences: {
           nodeIntegration: false,
-          contextIsolation: true,
-              webSecurity: false // <-- هذا السطر يسمح لنافذة المعاينة بقراءة صور assets فوراً!
+          contextIsolation: true
         }
       });
 

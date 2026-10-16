@@ -32,21 +32,40 @@ const dbProxy = new Proxy({}, {
 
 /**
  * Saves current in-memory SQLite state to the physical .sqlite file on disk.
+ * Includes a synchronous retry loop for EBUSY/EPERM file locking errors on Windows.
  */
 function saveToFile() {
   if (!db || !currentDbPath) return false;
   const tempPath = `${currentDbPath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const maxRetries = 3;
+  let lastErr = null;
+
   try {
     const data = db.export();
     const buffer = Buffer.from(data);
     fs.writeFileSync(tempPath, buffer);
-    fs.renameSync(tempPath, currentDbPath);
-    return true;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        fs.renameSync(tempPath, currentDbPath);
+        return true;
+      } catch (renameErr) {
+        lastErr = renameErr;
+        if ((renameErr.code === 'EBUSY' || renameErr.code === 'EPERM') && attempt < maxRetries) {
+          // Brief synchronous sleep for Windows file lock release
+          const waitTill = Date.now() + 50 * attempt;
+          while (Date.now() < waitTill) {}
+          continue;
+        }
+        throw renameErr;
+      }
+    }
+    return false;
   } catch (err) {
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     } catch (_) {}
-    console.error('[DB] خطأ أثناء حفظ قاعدة البيانات إلى القرص:', err);
+    console.error('[DB] خطأ أثناء حفظ قاعدة البيانات إلى القرص:', lastErr || err);
     return false;
   }
 }
@@ -383,6 +402,13 @@ async function init(dbPath) {
     `);
 
     db.run(`
+      CREATE INDEX IF NOT EXISTS idx_reservations_room ON reservations(room_id);
+      CREATE INDEX IF NOT EXISTS idx_reservations_guest ON reservations(guest_id);
+      CREATE INDEX IF NOT EXISTS idx_reservations_dates ON reservations(check_in_date, check_out_date);
+      CREATE INDEX IF NOT EXISTS idx_rooms_status ON rooms(status);
+      CREATE INDEX IF NOT EXISTS idx_guests_phone ON guests(phone);
+      CREATE INDEX IF NOT EXISTS idx_guests_id_number ON guests(id_number);
+      CREATE INDEX IF NOT EXISTS idx_employee_logs_user ON EmployeeLogs(user_id, id DESC);
       CREATE INDEX IF NOT EXISTS idx_payments_business_date ON payments(business_date);
       CREATE INDEX IF NOT EXISTS idx_deposit_movements_business_date ON deposit_movements(business_date);
       CREATE INDEX IF NOT EXISTS idx_reservations_created_business_date ON reservations(created_business_date);
@@ -852,6 +878,7 @@ function restoreInMemorySnapshot(snapshot) {
     try { db.close(); } catch (_) {}
   }
   db = new SQLRuntime.Database(snapshot);
+  db.run('PRAGMA foreign_keys = ON;');
 }
 
 /**
