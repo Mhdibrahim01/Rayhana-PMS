@@ -17,6 +17,7 @@ async function runComprehensiveMatrix() {
         room_number: roomNum,
         type,
         price_per_night: price,
+        monthly_price: price * 30,
         status: 'متاحة'
       });
       return db.getAllRooms().find(r => r.room_number === roomNum);
