@@ -27,10 +27,34 @@ if not exist "%DOCS_DIR%" (
     mkdir "%DOCS_DIR%"
 )
 
+:: Check if Rayhana ERP is currently running (Electron handles in-memory 12:00 AM backup directly)
+tasklist /FI "IMAGENAME eq rayhana-suites.exe" 2>nul | find /I /N "rayhana-suites.exe">nul
+if "%ERRORLEVEL%"=="0" (
+    echo [INFO] تطبيق ريحانة يعمل حالياً - سيقوم التطبيق بأخذ النسخة الاحتياطية مباشرة من الذاكرة لتفادي التعارض.
+    exit /b 0
+)
+
+tasklist /FI "IMAGENAME eq electron.exe" 2>nul | find /I /N "electron.exe">nul
+if "%ERRORLEVEL%"=="0" (
+    echo [INFO] تطبيق ريحانة (بيئة التطوير) يعمل حالياً - تخطي النسخ الموازي لتفادي التعارض.
+    exit /b 0
+)
+
 for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "DATE_STR=%%I"
 
 if "%DATE_STR%"=="" (
-    set "DATE_STR=%date:~10,4%-%date:~4,2%-%date:~7,2%"
+    for /f "skip=1 tokens=1-6" %%a in ('wmic path Win32_LocalTime get Year^,Month^,Day 2^>nul') do (
+        if not "%%c"=="" (
+            set "YYYY=%%c"
+            set "MM=0%%b"
+            set "DD=0%%a"
+            set "DATE_STR=!YYYY!-!MM:~-2!-!DD:~-2!"
+        )
+    )
+)
+
+if "%DATE_STR%"=="" (
+    set "DATE_STR=%date:~-4%-%date:~-10,2%-%date:~-7,2%"
 )
 
 set "BACKUP_NAME=rayhana_daily_backup_%DATE_STR%_12-00-AM.sqlite"

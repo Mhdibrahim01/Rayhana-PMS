@@ -814,7 +814,9 @@ function createBackupCopy(targetDestinationPath) {
   if (!currentDbPath || !fs.existsSync(currentDbPath)) {
     throw new Error('ملف قاعدة البيانات غير موجود.');
   }
-  saveToFile();
+  if (!saveToFile()) {
+    throw new Error('تعذر تفريغ وحفظ بيانات الذاكرة إلى القرص قبل أخذ النسخة الاحتياطية.');
+  }
   fs.copyFileSync(currentDbPath, targetDestinationPath);
   return { success: true, backupPath: targetDestinationPath };
 }

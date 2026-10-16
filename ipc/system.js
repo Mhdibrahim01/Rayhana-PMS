@@ -145,7 +145,20 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
       }
 
       await db.restoreDatabaseFile(filePaths[0]);
-      return { success: true, restoredPath: filePaths[0] };
+      const restoredDate = db.getCurrentBusinessDate();
+      const todayDate = db.getHotelBusinessDate();
+      const settings = db.getBusinessDaySettings();
+      let autoRolloverDisabled = false;
+      if (restoredDate < todayDate && settings.auto_rollover_enabled) {
+        db.updateBusinessDaySettings({ auto_rollover_enabled: false });
+        autoRolloverDisabled = true;
+      }
+      return {
+        success: true,
+        restoredPath: filePaths[0],
+        restoredBusinessDate: restoredDate,
+        autoRolloverDisabled
+      };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -193,7 +206,20 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
     }
     try {
       await db.restoreDatabaseFile(targetFilePath);
-      return { success: true, restoredPath: targetFilePath };
+      const restoredDate = db.getCurrentBusinessDate();
+      const todayDate = db.getHotelBusinessDate();
+      const settings = db.getBusinessDaySettings();
+      let autoRolloverDisabled = false;
+      if (restoredDate < todayDate && settings.auto_rollover_enabled) {
+        db.updateBusinessDaySettings({ auto_rollover_enabled: false });
+        autoRolloverDisabled = true;
+      }
+      return {
+        success: true,
+        restoredPath: targetFilePath,
+        restoredBusinessDate: restoredDate,
+        autoRolloverDisabled
+      };
     } catch (err) {
       return { success: false, error: err.message };
     }

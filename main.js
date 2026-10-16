@@ -167,20 +167,24 @@ function backupDatabase() {
       targetDir = customBackupDir;
       destinationLabel = `مجلد النسخ المخصص المختار (${path.basename(customBackupDir)})`;
     } else if (oneDrivePath && fs.existsSync(oneDrivePath)) {
-      // Step 2: Target Cloud Folder inside OneDrive
-      targetDir = path.join(oneDrivePath, 'AhmedERP_Backups');
+      // Step 2: Target Cloud Folder inside OneDrive (prefer Rayhana_Backups, fallback to AhmedERP_Backups)
+      const modernCloud = path.join(oneDrivePath, 'Rayhana_Backups');
+      const legacyCloud = path.join(oneDrivePath, 'AhmedERP_Backups');
+      targetDir = fs.existsSync(legacyCloud) && !fs.existsSync(modernCloud) ? legacyCloud : modernCloud;
       destinationLabel = 'Microsoft OneDrive (سحابي - Cloud Sync)';
     } else {
-      // Step 4: Smart Fallback (D:\AhmedERP_Backups or AppData)
+      // Step 4: Smart Fallback (D:\Rayhana_Backups or AppData)
       const dDrive = 'D:\\';
-      const dDriveBackup = 'D:\\AhmedERP_Backups';
+      const dDriveBackup = 'D:\\Rayhana_Backups';
+      const legacyDDrive = 'D:\\AhmedERP_Backups';
 
       if (fs.existsSync(dDrive)) {
         try {
-          if (!fs.existsSync(dDriveBackup)) {
-            fs.mkdirSync(dDriveBackup, { recursive: true });
+          const chosenDDrive = fs.existsSync(legacyDDrive) && !fs.existsSync(dDriveBackup) ? legacyDDrive : dDriveBackup;
+          if (!fs.existsSync(chosenDDrive)) {
+            fs.mkdirSync(chosenDDrive, { recursive: true });
           }
-          targetDir = dDriveBackup;
+          targetDir = chosenDDrive;
           destinationLabel = 'القرص المحلي (D:\\ Drive Fallback)';
         } catch (dErr) {
           console.warn('[Backup] تعذر استخدام القرص D:\\:', dErr.message);
@@ -189,7 +193,7 @@ function backupDatabase() {
 
       // Last resort fallback to app.getPath('userData')
       if (!targetDir) {
-        targetDir = path.join(app.getPath('userData'), 'AhmedERP_Backups');
+        targetDir = path.join(app.getPath('userData'), 'backups');
         destinationLabel = 'مجلد بيانات التطبيق المحلي (AppData Last Resort)';
       }
     }
@@ -341,14 +345,37 @@ if (!gotSingleInstanceLock) {
   });
 }
 
+let isCleanedUp = false;
+function performAppCleanup() {
+  if (isCleanedUp) return;
+  isCleanedUp = true;
+  try {
+    if (businessDayScheduler && typeof businessDayScheduler.stop === 'function') {
+      businessDayScheduler.stop();
+    }
+  } catch (_) {}
+  try {
+    if (backupScheduler && typeof backupScheduler.stopBackupScheduler === 'function') {
+      backupScheduler.stopBackupScheduler();
+    }
+  } catch (_) {}
+  try {
+    if (currentLogId && typeof db.logEmployeeLogout === 'function') {
+      db.logEmployeeLogout(currentLogId);
+      currentLogId = null;
+    }
+  } catch (_) {}
+  try {
+    if (db && typeof db.close === 'function') {
+      db.close();
+    }
+  } catch (_) {}
+}
+
+app.on('before-quit', performAppCleanup);
+
 app.on('window-all-closed', () => {
-  if (businessDayScheduler) businessDayScheduler.stop();
-  backupScheduler.stopBackupScheduler();
-  if (currentLogId) {
-    db.logEmployeeLogout(currentLogId);
-    currentLogId = null;
-  }
-  db.close();
+  performAppCleanup();
   if (process.platform !== 'darwin') {
     app.quit();
   }
