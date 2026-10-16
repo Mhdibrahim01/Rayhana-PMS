@@ -169,7 +169,8 @@ module.exports = function registerReservationsIpc(ipcMain, { db, session, helper
       const guestPhone = (data.guestPhone || data.phone || '').trim();
       const guestIdNumber = (data.guestIdNumber || data.id_number || '').trim();
       const existingGuest = db.searchGuest({ phone: guestPhone, id_number: guestIdNumber });
-      if (existingGuest && Number(existingGuest.is_banned) === 1 && !data.overrideBan) {
+      const isBannedGuest = existingGuest && Number(existingGuest.is_banned) === 1;
+      if (isBannedGuest && !data.overrideBan) {
         const banReason = existingGuest.ban_reason ? ` (سبب الحظر: ${existingGuest.ban_reason})` : '';
         return {
           success: false,
@@ -178,7 +179,12 @@ module.exports = function registerReservationsIpc(ipcMain, { db, session, helper
         };
       }
 
-      const result = db.createReservation(data);
+      const result = db.createReservation({
+        ...data,
+        userId: session.currentUser ? session.currentUser.id : null,
+        overrideBan: Boolean(data.overrideBan && isBannedGuest),
+        overrideUsername: session.currentUser?.username || 'الموظف'
+      });
       return result;
     } catch (err) {
       return { success: false, error: err.message };

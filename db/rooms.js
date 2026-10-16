@@ -201,39 +201,49 @@ function autoUpdateRoomStatuses(currentDate, { persist = true } = {}) {
   let occupiedCount = 0;
   let hasStatusChanges = false;
 
-  for (const room of allRooms) {
-    let targetStatus = room.status;
-    const roomActiveReservations = activeByRoom.get(room.id) || [];
-    const hasGuestAlreadyArrived = roomActiveReservations.some(reservation => reservation.check_in_date < today);
+  db.run("SAVEPOINT auto_room_status_sp;");
+  try {
+    for (const room of allRooms) {
+      let targetStatus = room.status;
+      const roomActiveReservations = activeByRoom.get(room.id) || [];
+      const hasGuestAlreadyArrived = roomActiveReservations.some(reservation => reservation.check_in_date < today);
 
-    // Preserve maintenance statuses when room is not occupied
-    if (room.status === 'صيانة' && !occupiedRoomIds.has(room.id)) {
-      targetStatus = 'صيانة';
-    } else if (room.status === 'تنظيف' && !hasGuestAlreadyArrived) {
-      targetStatus = 'تنظيف';
-    } else if (occupiedRoomIds.has(room.id)) {
-      targetStatus = 'مشغولة';
-    } else if (futureRoomIds.has(room.id)) {
-      targetStatus = 'محجوزة';
-    } else {
-      targetStatus = 'متاحة';
-    }
-
-    if (targetStatus === 'مشغولة') occupiedCount++;
-    if (targetStatus !== room.status) {
-      if (targetStatus === 'مشغولة' && room.status !== 'مشغولة') {
-        const arrivedReservations = roomActiveReservations.filter(reservation => reservation.check_in_date <= today);
-        for (const reservation of arrivedReservations) {
-          db.run(`
-            INSERT OR IGNORE INTO reservation_events (
-              entity_type, entity_id, event_type, new_status, created_at, business_date
-            ) VALUES ('reservation', ?, 'check_in', 'وصل النزيل', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?)
-          `, [reservation.id, getCurrentBusinessDate()]);
-        }
+      // Preserve maintenance statuses when room is not occupied
+      if (room.status === 'صيانة' && !occupiedRoomIds.has(room.id)) {
+        targetStatus = 'صيانة';
+      } else if (room.status === 'تنظيف' && !hasGuestAlreadyArrived) {
+        targetStatus = 'تنظيف';
+      } else if (occupiedRoomIds.has(room.id)) {
+        targetStatus = 'مشغولة';
+      } else if (futureRoomIds.has(room.id)) {
+        targetStatus = 'محجوزة';
+      } else {
+        targetStatus = 'متاحة';
       }
-      db.run("UPDATE rooms SET status = ? WHERE id = ?", [targetStatus, room.id]);
-      hasStatusChanges = true;
+
+      if (targetStatus === 'مشغولة') occupiedCount++;
+      if (targetStatus !== room.status) {
+        if (targetStatus === 'مشغولة' && room.status !== 'مشغولة') {
+          const arrivedReservations = roomActiveReservations.filter(reservation => reservation.check_in_date <= today);
+          for (const reservation of arrivedReservations) {
+            db.run(`
+              INSERT OR IGNORE INTO reservation_events (
+                entity_type, entity_id, event_type, new_status, created_at, business_date
+              ) VALUES ('reservation', ?, 'check_in', 'وصل النزيل', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?)
+            `, [reservation.id, getCurrentBusinessDate()]);
+          }
+        }
+        db.run("UPDATE rooms SET status = ? WHERE id = ?", [targetStatus, room.id]);
+        hasStatusChanges = true;
+      }
     }
+    db.run("RELEASE SAVEPOINT auto_room_status_sp;");
+  } catch (err) {
+    try {
+      db.run("ROLLBACK TO SAVEPOINT auto_room_status_sp;");
+      db.run("RELEASE SAVEPOINT auto_room_status_sp;");
+    } catch (_) {}
+    throw err;
   }
 
   if (hasStatusChanges && persist) saveToFile();

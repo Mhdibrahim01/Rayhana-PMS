@@ -26,17 +26,27 @@ function recordDepositMovement({ reservationId, type, amount, paymentMethod = '�
   if (!['collected', 'reconciled'].includes(type) && value - current > 0.005) {
     throw new Error(`حركة التأمين (${value} ريال) تتجاوز الرصيد المسجل (${current} ريال).`);
   }
-  const stmt = db.prepare(`
-    INSERT INTO deposit_movements (reservation_id, movement_type, amount, payment_method, movement_date, user_id, reason)
-    VALUES (?, ?, ?, ?, datetime('now', 'localtime'), ?, ?)
-  `);
-  stmt.run([reservationId, type, value, paymentMethod || 'نقداً', userId ? parseInt(userId, 10) : null, reason || null]);
-  stmt.free();
-  const nextBalance = roundMoney(current + (['collected', 'reconciled'].includes(type) ? value : -value));
-  const upd = db.prepare('UPDATE reservations SET deposit_amount = ? WHERE id = ?');
-  upd.run([nextBalance, reservationId]);
-  upd.free();
-  return nextBalance;
+  db.run("SAVEPOINT dep_mv_sp;");
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO deposit_movements (reservation_id, movement_type, amount, payment_method, movement_date, user_id, reason)
+      VALUES (?, ?, ?, ?, datetime('now', 'localtime'), ?, ?)
+    `);
+    stmt.run([reservationId, type, value, paymentMethod || 'نقداً', userId ? parseInt(userId, 10) : null, reason || null]);
+    stmt.free();
+    const nextBalance = roundMoney(current + (['collected', 'reconciled'].includes(type) ? value : -value));
+    const upd = db.prepare('UPDATE reservations SET deposit_amount = ? WHERE id = ?');
+    upd.run([nextBalance, reservationId]);
+    upd.free();
+    db.run("RELEASE SAVEPOINT dep_mv_sp;");
+    return nextBalance;
+  } catch (err) {
+    try {
+      db.run("ROLLBACK TO SAVEPOINT dep_mv_sp;");
+      db.run("RELEASE SAVEPOINT dep_mv_sp;");
+    } catch (_) {}
+    throw err;
+  }
 }
 
 function reconcileLegacyDeposit({ reservationId, amount, paymentMethod = 'نقداً', userId = null }) {
@@ -431,7 +441,9 @@ function createReservation({
   isEarlyCheckin = null,
   is_early_checkin = null,
   actualCheckInAt = null,
-  actual_check_in_at = null
+  actual_check_in_at = null,
+  overrideBan = false,
+  overrideUsername = null
 }) {
   const explicitEarly = isEarlyCheckin !== null
     ? isEarlyCheckin
@@ -506,6 +518,16 @@ function createReservation({
   }
 
   const parsedRoomId = parseInt(roomId, 10);
+  const roomRow = queryOne("SELECT id, room_number, status, price_per_night, monthly_price FROM rooms WHERE id = ?", [parsedRoomId]);
+  if (!roomRow) {
+    throw new Error('الغرفة المحددة غير موجودة.');
+  }
+
+  const todayStr = getCurrentBusinessDate();
+  if (roomRow.status === 'صيانة' && checkInDate && checkInDate <= todayStr) {
+    throw new Error(`الغرفة رقم (${roomRow.room_number}) تحت الصيانة حالياً ولا يمكن تسكين النزيل فيها.`);
+  }
+
   let computedCheckOutDate = checkOutDate ? checkOutDate.trim() : null;
   let total;
   const paid = roundMoney(paidAmount);
@@ -537,11 +559,6 @@ function createReservation({
     // snapshotted so later room edits cannot reprice an existing reservation.
     if (!checkInDate) {
       throw new Error('تاريخ الوصول مطلوب لحساب موعد الإقامة الشهرية.');
-    }
-
-    const roomRow = queryOne("SELECT price_per_night, monthly_price FROM rooms WHERE id = ?", [parsedRoomId]);
-    if (!roomRow) {
-      throw new Error('الغرفة المحددة غير موجودة.');
     }
 
     const roomMonthlyPrice = Number(roomRow.monthly_price);
@@ -613,28 +630,29 @@ function createReservation({
     const [year, month, day] = checkInDate.split('-').map(Number);
     effectiveNewCheckout = getLocalDateString(new Date(year, month - 1, day + 1));
   }
-  const conflict = queryOne(`
-    SELECT r.id, r.check_in_date, r.check_out_date, r.booking_type, g.name AS guest_name
-    FROM reservations r
-    LEFT JOIN guests g ON r.guest_id = g.id
-    WHERE r.room_id = ? 
-      AND r.status = 'مؤكد'
-      AND r.check_in_date < ? 
-      AND CASE
-        WHEN r.booking_type = 'استخدام يومي' AND r.check_out_date = r.check_in_date
-          THEN date(r.check_in_date, '+1 day')
-        ELSE COALESCE(NULLIF(r.check_out_date, ''), '9999-12-31')
-      END > ?
-    LIMIT 1
-  `, [parsedRoomId, effectiveNewCheckout, checkInDate]);
-
-  if (conflict) {
-    const conflictOutStr = conflict.check_out_date || 'مفتوح (غير محدد)';
-    throw new Error(`الغرفة محجوزة بالفعل في الفترة المحددة: يوجد حجز مؤكد #${conflict.id} (${conflict.guest_name ? `النزيل: ${conflict.guest_name}، ` : ''}من ${conflict.check_in_date} إلى ${conflictOutStr}).`);
-  }
 
   db.run("BEGIN TRANSACTION;");
   try {
+    const conflict = queryOne(`
+      SELECT r.id, r.check_in_date, r.check_out_date, r.booking_type, g.name AS guest_name
+      FROM reservations r
+      LEFT JOIN guests g ON r.guest_id = g.id
+      WHERE r.room_id = ? 
+        AND r.status = 'مؤكد'
+        AND r.check_in_date < ? 
+        AND CASE
+          WHEN r.booking_type = 'استخدام يومي' AND r.check_out_date = r.check_in_date
+            THEN date(r.check_in_date, '+1 day')
+          ELSE COALESCE(NULLIF(r.check_out_date, ''), '9999-12-31')
+        END > ?
+      LIMIT 1
+    `, [parsedRoomId, effectiveNewCheckout, checkInDate]);
+
+    if (conflict) {
+      const conflictOutStr = conflict.check_out_date || 'مفتوح (غير محدد)';
+      throw new Error(`الغرفة محجوزة بالفعل في الفترة المحددة: يوجد حجز مؤكد #${conflict.id} (${conflict.guest_name ? `النزيل: ${conflict.guest_name}، ` : ''}من ${conflict.check_in_date} إلى ${conflictOutStr}).`);
+    }
+
     let guest = null;
     if (guestIdNumber) {
       guest = queryOne("SELECT id FROM guests WHERE id_number = ?", [guestIdNumber.trim()]);
@@ -706,6 +724,23 @@ function createReservation({
     const createdRes = queryOne("SELECT id FROM reservations ORDER BY id DESC LIMIT 1");
     const newReservationId = createdRes.id;
 
+    if (overrideBan) {
+      const auditUser = overrideUsername || (userId ? `مستخدم #${userId}` : 'الموظف');
+      const stmtAudit = db.prepare(`
+        INSERT INTO reservation_events (
+          entity_type, entity_id, event_type,
+          old_status, new_status, created_at, business_date, user_id
+        ) VALUES ('reservation', ?, 'ban_overridden', 'محظور', ?, datetime('now', 'localtime'), ?, ?)
+      `);
+      stmtAudit.run([
+        newReservationId,
+        `تم تجاوز الحظر بواسطة: ${auditUser}`,
+        todayStr,
+        userId ? parseInt(userId, 10) : null
+      ]);
+      stmtAudit.free();
+    }
+
     // Record initial payment in the payments ledger table
     let receiptNumber = null;
     if (paid > 0) {
@@ -739,7 +774,6 @@ function createReservation({
     // Dynamic Room Status Evaluation:
     // Only mark room as 'مشغولة' if CURRENT_DATE >= check_in_date AND CURRENT_DATE < effectiveNewCheckout.
     // If check_in_date is in the future, mark as 'محجوزة' (unless it is already occupied today by another guest).
-    const todayStr = getCurrentBusinessDate();
     let assignedRoomStatus = 'متاحة';
     const currentRoom = queryOne("SELECT status FROM rooms WHERE id = ?", [parsedRoomId]);
 
@@ -1754,7 +1788,11 @@ function extendReservation({
       AND r.status = 'مؤكد'
       AND r.id != ?
       AND r.check_in_date < ?
-      AND (r.check_out_date > ? OR r.check_out_date = 'مفتوح' OR r.check_out_date IS NULL OR r.check_out_date = '')
+      AND CASE
+        WHEN r.booking_type = 'استخدام يومي' AND r.check_out_date = r.check_in_date
+          THEN date(r.check_in_date, '+1 day')
+        ELSE COALESCE(NULLIF(r.check_out_date, ''), '9999-12-31')
+      END > ?
     LIMIT 1
   `, [res.room_id, targetId, cleanNewCheckOut, oldCheckOut]);
 
@@ -2031,15 +2069,40 @@ function cancelReservation(reservationId, actualDepartureDate = null, manualOver
 
     // Do NOT delete payment rows — payment history is fully preserved!
 
-    // Reset room status to 'متاحة' only if no other active confirmed reservation exists for this room
-    const otherActive = queryOne(
-      "SELECT id FROM reservations WHERE room_id = ? AND status = 'مؤكد' AND id != ?",
-      [res.room_id, targetId]
-    );
-    if (!otherActive) {
-      const stmt2 = db.prepare("UPDATE rooms SET status = 'متاحة' WHERE id = ?");
-      stmt2.run([res.room_id]);
-      stmt2.free();
+    // Update room status properly:
+    // If room is under maintenance, do not overwrite 'صيانة'.
+    // Otherwise check if another confirmed reservation actively occupies the room today.
+    const roomRow = queryOne("SELECT status FROM rooms WHERE id = ?", [res.room_id]);
+    if (roomRow && roomRow.status !== 'صيانة') {
+      const todayStr = getCurrentBusinessDate();
+      const otherCurrentlyActive = queryOne(`
+        SELECT id FROM reservations 
+        WHERE room_id = ? 
+          AND status = 'مؤكد' 
+          AND id != ?
+          AND check_in_date <= ?
+          AND CASE
+            WHEN booking_type = 'استخدام يومي' AND check_out_date = check_in_date
+              THEN date(check_in_date, '+1 day')
+            ELSE COALESCE(NULLIF(check_out_date, ''), '9999-12-31')
+          END > ?
+        LIMIT 1
+      `, [res.room_id, targetId, todayStr, todayStr]);
+
+      if (otherCurrentlyActive) {
+        const stmt2 = db.prepare("UPDATE rooms SET status = 'مشغولة' WHERE id = ?");
+        stmt2.run([res.room_id]);
+        stmt2.free();
+      } else {
+        const futureBooking = queryOne(
+          "SELECT id FROM reservations WHERE room_id = ? AND status = 'مؤكد' AND id != ? AND check_in_date > ? LIMIT 1",
+          [res.room_id, targetId, todayStr]
+        );
+        const newStatus = futureBooking ? 'محجوزة' : 'متاحة';
+        const stmt2 = db.prepare("UPDATE rooms SET status = ? WHERE id = ?");
+        stmt2.run([newStatus, res.room_id]);
+        stmt2.free();
+      }
     }
 
     db.run("COMMIT;");
@@ -2306,65 +2369,73 @@ function bulkImportReservations(reservationsList) {
   let inserted = 0;
   let skipped = 0;
 
-  for (const r of reservationsList) {
-    const guestName = String(r.guest_name || r.name || r['اسم النزيل'] || r['النزيل'] || '').trim();
-    const guestPhone = String(r.guest_phone || r.phone || r['رقم الجوال'] || r['الجوال'] || '').trim();
-    const roomNumber = String(r.room_number || r['رقم الغرفة'] || r['الغرفة'] || '').trim();
-    const checkIn = String(r.check_in_date || r['تاريخ الوصول'] || r['الوصول'] || '').trim();
-    const checkOut = String(r.check_out_date || r['تاريخ المغادرة'] || r['المغادرة'] || '').trim();
-    const price = roundMoney(parseFloat(r.total_price || r['السعر الإجمالي'] || r['المبلغ'] || r['الإجمالي']) || 0);
-    const paid = roundMoney(parseFloat(r.paid_amount || r['المدفوع'] || r['المبلغ المدفوع']) || 0);
+  db.run("BEGIN TRANSACTION;");
+  try {
+    for (const r of reservationsList) {
+      const guestName = String(r.guest_name || r.name || r['اسم النزيل'] || r['النزيل'] || '').trim();
+      const guestPhone = String(r.guest_phone || r.phone || r['رقم الجوال'] || r['الجوال'] || '').trim();
+      const roomNumber = String(r.room_number || r['رقم الغرفة'] || r['الغرفة'] || '').trim();
+      const checkIn = String(r.check_in_date || r['تاريخ الوصول'] || r['الوصول'] || '').trim();
+      const checkOut = String(r.check_out_date || r['تاريخ المغادرة'] || r['المغادرة'] || '').trim();
+      const price = roundMoney(parseFloat(r.total_price || r['السعر الإجمالي'] || r['المبلغ'] || r['الإجمالي']) || 0);
+      const paid = roundMoney(parseFloat(r.paid_amount || r['المدفوع'] || r['المبلغ المدفوع']) || 0);
 
-    if (!guestName || !checkIn || !checkOut) {
-      skipped++;
-      continue;
+      if (!guestName || !checkIn || !checkOut) {
+        skipped++;
+        continue;
+      }
+
+      // Match Room
+      let room = null;
+      if (roomNumber) {
+        room = queryOne("SELECT id FROM rooms WHERE room_number = ?", [roomNumber]);
+      }
+      if (!room) {
+        room = queryOne("SELECT id FROM rooms WHERE status = 'متاحة' LIMIT 1") || queryOne("SELECT id FROM rooms LIMIT 1");
+      }
+      if (!room) {
+        skipped++;
+        continue;
+      }
+
+      // Match or create guest
+      let guest = null;
+      if (guestPhone) guest = queryOne("SELECT id FROM guests WHERE phone = ?", [guestPhone]);
+      if (!guest) guest = queryOne("SELECT id FROM guests WHERE name = ?", [guestName]);
+
+      let guestId;
+      if (guest) {
+        guestId = guest.id;
+      } else {
+        const gStmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
+        gStmt.run([guestName, guestPhone, '']);
+        gStmt.free();
+        guestId = queryOne("SELECT id FROM guests ORDER BY id DESC LIMIT 1").id;
+      }
+
+      let paymentStatus = 'غير مدفوع';
+      if (paid >= price && price > 0) paymentStatus = 'مدفوع بالكامل';
+      else if (paid > 0) paymentStatus = 'مدفوع جزئياً';
+
+      const resStmt = db.prepare("INSERT INTO reservations (guest_id, room_id, check_in_date, check_out_date, total_price, paid_amount, payment_status, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'مؤكد')");
+      resStmt.run([guestId, room.id, checkIn, checkOut, price, paid, paymentStatus]);
+      resStmt.free();
+      
+      if (paid > 0) {
+        const newResId = queryOne("SELECT id FROM reservations ORDER BY id DESC LIMIT 1").id;
+        const receiptNumber = generateReceiptNumber(newResId);
+        const payStmt = db.prepare("INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, notes) VALUES (?, ?, ?, 'تحويل بنكي', 'advance_payment', datetime('now', 'localtime'), 'رصيد مرحل من استيراد النظام القديم')");
+        payStmt.run([receiptNumber, newResId, paid]);
+        payStmt.free();
+      }
+      
+      inserted++;
     }
 
-    // Match Room
-    let room = null;
-    if (roomNumber) {
-      room = queryOne("SELECT id FROM rooms WHERE room_number = ?", [roomNumber]);
-    }
-    if (!room) {
-      room = queryOne("SELECT id FROM rooms WHERE status = 'متاحة' LIMIT 1") || queryOne("SELECT id FROM rooms LIMIT 1");
-    }
-    if (!room) {
-      skipped++;
-      continue;
-    }
-
-    // Match or create guest
-    let guest = null;
-    if (guestPhone) guest = queryOne("SELECT id FROM guests WHERE phone = ?", [guestPhone]);
-    if (!guest) guest = queryOne("SELECT id FROM guests WHERE name = ?", [guestName]);
-
-    let guestId;
-    if (guest) {
-      guestId = guest.id;
-    } else {
-      const gStmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
-      gStmt.run([guestName, guestPhone, '']);
-      gStmt.free();
-      guestId = queryOne("SELECT id FROM guests ORDER BY id DESC LIMIT 1").id;
-    }
-
-    let paymentStatus = 'غير مدفوع';
-    if (paid >= price && price > 0) paymentStatus = 'مدفوع بالكامل';
-    else if (paid > 0) paymentStatus = 'مدفوع جزئياً';
-
-    const resStmt = db.prepare("INSERT INTO reservations (guest_id, room_id, check_in_date, check_out_date, total_price, paid_amount, payment_status, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'مؤكد')");
-    resStmt.run([guestId, room.id, checkIn, checkOut, price, paid, paymentStatus]);
-    resStmt.free();
-    
-    if (paid > 0) {
-      const newResId = queryOne("SELECT id FROM reservations ORDER BY id DESC LIMIT 1").id;
-      const receiptNumber = generateReceiptNumber(newResId);
-      const payStmt = db.prepare("INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, notes) VALUES (?, ?, ?, 'تحويل بنكي', 'advance_payment', datetime('now', 'localtime'), 'رصيد مرحل من استيراد النظام القديم')");
-      payStmt.run([receiptNumber, newResId, paid]);
-      payStmt.free();
-    }
-    
-    inserted++;
+    db.run("COMMIT;");
+  } catch (err) {
+    try { db.run("ROLLBACK;"); } catch (_) {}
+    throw err;
   }
 
   saveToFile();
