@@ -89,7 +89,26 @@ const DEFAULT_BRANDING = {
   }
 };
 
-function readBrandingConfigFromDisk() {
+function readBrandingConfigFromDisk(app) {
+  let userPath = null;
+  if (app && typeof app.getPath === 'function') {
+    try {
+      userPath = path.join(app.getPath('userData'), 'branding.json');
+    } catch (_) {}
+  }
+
+  if (userPath && fs.existsSync(userPath)) {
+    try {
+      const raw = fs.readFileSync(userPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.brands && parsed.activeBrand && parsed.brands[parsed.activeBrand]) {
+        return parsed;
+      }
+    } catch (err) {
+      console.warn('[Branding] Failed reading userData config:', err.message);
+    }
+  }
+
   try {
     if (fs.existsSync(BRANDING_FILE_PATH)) {
       const raw = fs.readFileSync(BRANDING_FILE_PATH, 'utf8');
@@ -104,51 +123,90 @@ function readBrandingConfigFromDisk() {
   return JSON.parse(JSON.stringify(DEFAULT_BRANDING));
 }
 
-function writeBrandingConfigToDisk(config) {
-  try {
-    const dir = path.dirname(BRANDING_FILE_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+function writeBrandingConfigToDisk(config, app) {
+  let written = false;
+  const isPackaged = Boolean(app && app.isPackaged);
+
+  if (!isPackaged) {
+    try {
+      const dir = path.dirname(BRANDING_FILE_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(BRANDING_FILE_PATH, JSON.stringify(config, null, 2), 'utf8');
+      written = true;
+    } catch (err) {
+      console.warn('[Branding] Could not write to workspace branding.json:', err.message);
     }
-    fs.writeFileSync(BRANDING_FILE_PATH, JSON.stringify(config, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('[Branding] Failed to write config to disk:', err.message);
-    return false;
   }
+
+  let userPath = null;
+  if (app && typeof app.getPath === 'function') {
+    try {
+      userPath = path.join(app.getPath('userData'), 'branding.json');
+    } catch (_) {}
+  }
+
+  if (userPath && (isPackaged || !written)) {
+    try {
+      const dir = path.dirname(userPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(userPath, JSON.stringify(config, null, 2), 'utf8');
+      written = true;
+    } catch (err) {
+      console.error('[Branding] Could not write to userData branding.json:', err.message);
+    }
+  }
+
+  return written;
 }
 
-function registerBrandingIpc(ipcMain, { BrowserWindow, session }) {
-  // Get active branding and all brand profiles
+function registerBrandingIpc(ipcMain, { app, BrowserWindow, session }) {
+  // Get active branding and brand profiles (sanitized for packaged client vs dev)
   ipcMain.handle('brand:get-config', async () => {
-    const config = readBrandingConfigFromDisk();
+    const isPackaged = Boolean(app && app.isPackaged);
+    const config = readBrandingConfigFromDisk(app);
     const activeId = config.activeBrand || 'hotel_1';
     const activeBrand = config.brands[activeId] || config.brands.hotel_1;
+
+    // Packaged builds only expose their own active hotel. Dev environment exposes all.
+    const brandsPayload = isPackaged
+      ? { [activeId]: activeBrand }
+      : config.brands;
+
     return {
       success: true,
+      isPackaged,
       activeBrandId: activeId,
       current: activeBrand,
-      brands: config.brands,
+      brands: brandsPayload,
       hideBrandSwitcherInExe: Boolean(config.hideBrandSwitcherInExe)
     };
   });
 
-  // Switch the active brand (Admin only)
+  // Switch the active brand (Admin only, Dev environment only)
   ipcMain.handle('brand:set-active', async (_event, brandId) => {
     if (!session.currentUser || session.currentUser.role !== 'Admin') {
       return { success: false, error: 'غير مصرح: تغيير هوية الفندق يتطلب صلاحيات المدير (Admin).' };
     }
-    const config = readBrandingConfigFromDisk();
+    const isPackaged = Boolean(app && app.isPackaged);
+    if (isPackaged) {
+      return { success: false, error: 'غير مصرح: تغيير هوية الفندق غير متاح في النسخة المثبتة للعميل.' };
+    }
+    const config = readBrandingConfigFromDisk(app);
     if (!config.brands[brandId]) {
       return { success: false, error: `معرف الهوية غير معروف: ${brandId}` };
     }
     config.activeBrand = brandId;
-    const ok = writeBrandingConfigToDisk(config);
+    const ok = writeBrandingConfigToDisk(config, app);
     if (!ok) {
       return { success: false, error: 'فشل حفظ إعدادات الهوية على القرص.' };
     }
 
     const payload = {
+      isPackaged,
       activeBrandId: brandId,
       current: config.brands[brandId],
       brands: config.brands
@@ -166,25 +224,30 @@ function registerBrandingIpc(ipcMain, { BrowserWindow, session }) {
     return { success: true, ...payload };
   });
 
-  // Update a brand profile (Admin only)
+  // Update a brand profile (Admin only; in packaged mode updates current hotel)
   ipcMain.handle('brand:update-profile', async (_event, { brandId, profile }) => {
     if (!session.currentUser || session.currentUser.role !== 'Admin') {
-      return { success: false, error: 'غير مصرح: تحديث بيانات الهوية يتطلب صلاحيات المدير (Admin).' };
+      return { success: false, error: 'غير مصرح: تحديث بيانات المنشأة يتطلب صلاحيات المدير (Admin).' };
     }
-    const config = readBrandingConfigFromDisk();
-    if (!config.brands[brandId]) {
-      return { success: false, error: `معرف الهوية غير معروف: ${brandId}` };
+    const isPackaged = Boolean(app && app.isPackaged);
+    const config = readBrandingConfigFromDisk(app);
+
+    const targetBrandId = isPackaged ? (config.activeBrand || 'hotel_1') : (brandId || config.activeBrand || 'hotel_1');
+
+    if (!config.brands[targetBrandId]) {
+      return { success: false, error: `معرف الهوية غير معروف: ${targetBrandId}` };
     }
-    config.brands[brandId] = Object.assign({}, config.brands[brandId], profile, { id: brandId });
-    const ok = writeBrandingConfigToDisk(config);
+    config.brands[targetBrandId] = Object.assign({}, config.brands[targetBrandId], profile, { id: targetBrandId });
+    const ok = writeBrandingConfigToDisk(config, app);
     if (!ok) {
-      return { success: false, error: 'فشل حفظ تحديثات الهوية.' };
+      return { success: false, error: 'فشل حفظ تحديثات بيانات المنشأة.' };
     }
 
     const payload = {
+      isPackaged,
       activeBrandId: config.activeBrand,
       current: config.brands[config.activeBrand],
-      brands: config.brands
+      brands: isPackaged ? { [config.activeBrand]: config.brands[config.activeBrand] } : config.brands
     };
 
     if (BrowserWindow && typeof BrowserWindow.getAllWindows === 'function') {

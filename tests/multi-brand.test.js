@@ -110,7 +110,7 @@ test('Multi-Brand IPC Handlers & Access Control', async (t) => {
     assert.match(res.error, /غير مصرح/);
   });
 
-  await t.test('Admin role can switch brand and update profile', async () => {
+  await t.test('Admin role can switch brand and update profile in dev mode', async () => {
     session.currentUser = { id: 1, username: 'admin', role: 'Admin' };
     const originalConfig = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
 
@@ -128,6 +128,43 @@ test('Multi-Brand IPC Handlers & Access Control', async (t) => {
     } finally {
       // Restore original config
       fs.writeFileSync(BRANDING_PATH, JSON.stringify(originalConfig, null, 2), 'utf8');
+    }
+  });
+
+  await t.test('Packaged mode isolates client to their active hotel only and rejects switching', async () => {
+    const os = require('node:os');
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'branding-test-'));
+    try {
+      const packagedIpc = new FakeIpcMain();
+      const packagedApp = { isPackaged: true, getPath: () => tempDir };
+      registerBrandingIpc(packagedIpc, { app: packagedApp, BrowserWindow: fakeBrowserWindow, session });
+
+      session.currentUser = { id: 1, username: 'admin', role: 'Admin' };
+
+      // Get config in packaged mode returns only active hotel
+      const cfg = await packagedIpc.invoke('brand:get-config', {});
+      assert.equal(cfg.success, true);
+      assert.equal(cfg.isPackaged, true);
+      assert.equal(Object.keys(cfg.brands).length, 1);
+      assert.ok(cfg.brands[cfg.activeBrandId]);
+
+      // Switching is blocked in packaged mode
+      const switchAttempt = await packagedIpc.invoke('brand:set-active', {}, 'hotel_3');
+      assert.equal(switchAttempt.success, false);
+      assert.match(switchAttempt.error, /غير مصرح/);
+
+      // Profile update in packaged mode targets their hotel
+      const updateAttempt = await packagedIpc.invoke('brand:update-profile', {}, {
+        brandId: 'hotel_1',
+        profile: { address: 'الخبر - شارع الملك عبدالعزيز' }
+      });
+      assert.equal(updateAttempt.success, true);
+      assert.equal(updateAttempt.isPackaged, true);
+      assert.equal(Object.keys(updateAttempt.brands).length, 1);
+    } finally {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (_) {}
     }
   });
 });

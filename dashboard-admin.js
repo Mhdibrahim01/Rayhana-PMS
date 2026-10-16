@@ -125,35 +125,56 @@
         return;
       }
 
-      let isPackaged = false;
+      let isPackaged = Boolean(App.State.isPackaged);
       try {
         if (typeof window.api.getAppInfo === 'function') {
           const info = await window.api.getAppInfo();
-          isPackaged = Boolean(info && info.isPackaged);
+          if (info && typeof info.isPackaged === 'boolean') {
+            isPackaged = info.isPackaged;
+          }
         }
       } catch (_) {}
 
       const res = await window.api.getBrandingConfig();
       if (res && res.success) {
-        if (isPackaged || res.hideBrandSwitcherInExe) {
-          if (brandCard) {
-            brandCard.style.display = 'none';
-            brandCard.setAttribute('hidden', '');
-          }
-          return;
+        if (brandCard) {
+          brandCard.style.display = '';
+          brandCard.removeAttribute('hidden');
         }
 
+        const effectiveIsPackaged = Boolean(isPackaged || res.isPackaged);
+        App.State.isPackaged = effectiveIsPackaged;
         App.State.brands = res.brands || {};
         App.State.activeBrandId = res.activeBrandId || 'hotel_1';
         App.State.branding = res.current;
 
-        const selector = document.getElementById('brand-selector');
-        if (selector && res.brands) {
-          selector.innerHTML = Object.entries(res.brands).map(([id, b]) => {
-            return `<option value="${id}">${App.Helpers.escapeHtml(b.nameAr)} (${App.Helpers.escapeHtml(b.nameEn || id)})</option>`;
-          }).join('');
-          selector.value = App.State.activeBrandId;
+        const switcherControls = document.getElementById('brand-switcher-controls');
+        const titleEl = document.getElementById('brand-management-title');
+        const subtitleEl = document.getElementById('brand-management-subtitle');
+        const btnSave = document.getElementById('btn-save-brand-profile');
+
+        if (effectiveIsPackaged) {
+          // Client mode (Packaged EXE): Only show their hotel data, hide brand switcher
+          if (switcherControls) switcherControls.style.display = 'none';
+          if (titleEl) titleEl.innerHTML = '<span>🏨</span> بيانات المنشأة والفندق (Hotel Profile)';
+          if (subtitleEl) subtitleEl.textContent = 'بيانات المنشأة المعتمدة في الفواتير الرسمية والتقارير والسندات.';
+          if (btnSave) btnSave.innerHTML = '💾 حفظ بيانات المنشأة';
+        } else {
+          // Developer mode (Local/Dev): Show all brands and switcher controls
+          if (switcherControls) switcherControls.style.display = 'flex';
+          if (titleEl) titleEl.innerHTML = '<span>🏷️</span> إدارة الهوية والعلامة التجارية (Multi-Brand / White-Label)';
+          if (subtitleEl) subtitleEl.textContent = 'التبديل بين هويات الفنادق وتحديث بيانات الفاتورة والأختام والتواقيع المعتمدة.';
+          if (btnSave) btnSave.innerHTML = '💾 حفظ تعديلات الهوية';
+
+          const selector = document.getElementById('brand-selector');
+          if (selector && res.brands) {
+            selector.innerHTML = Object.entries(res.brands).map(([id, b]) => {
+              return `<option value="${id}">${App.Helpers.escapeHtml(b.nameAr)} (${App.Helpers.escapeHtml(b.nameEn || id)})</option>`;
+            }).join('');
+            selector.value = App.State.activeBrandId;
+          }
         }
+
         updateBrandPreviewAndInputs(res.current);
       }
     } catch (error) {
@@ -527,8 +548,9 @@
   if (brandProfileForm) {
     brandProfileForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const isPackaged = Boolean(App.State.isPackaged);
       const selector = document.getElementById('brand-selector');
-      const selectedId = selector ? selector.value : App.State.activeBrandId;
+      const selectedId = (!isPackaged && selector && selector.value) ? selector.value : App.State.activeBrandId;
       if (!selectedId) return;
 
       const profile = {
@@ -553,10 +575,11 @@
             App.State.branding = res.current;
             App.Helpers.applyBranding(res.current);
           }
-          updateBrandPreviewAndInputs(res.brands[selectedId]);
-          App.Helpers.showToast('تم حفظ تعديلات الهوية بنجاح!', 'success');
+          const updatedBrand = (res.brands && res.brands[selectedId]) || res.current;
+          updateBrandPreviewAndInputs(updatedBrand);
+          App.Helpers.showToast('تم حفظ بيانات المنشأة بنجاح!', 'success');
         } else {
-          App.Helpers.showToast(res?.error || 'فشل حفظ بيانات الهوية.', 'error');
+          App.Helpers.showToast(res?.error || 'فشل حفظ بيانات المنشأة.', 'error');
         }
       } catch (err) {
         App.Helpers.showToast(`خطأ في حفظ البيانات: ${err.message}`, 'error');

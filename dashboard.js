@@ -3056,20 +3056,21 @@
           window.DashboardApp.State.activeBrandId = brandRes.activeBrandId;
           window.DashboardApp.Helpers.applyBranding(brandRes.current);
 
-          let isPackaged = false;
+          let isPackaged = Boolean(brandRes.isPackaged);
           try {
             if (typeof window.api.getAppInfo === 'function') {
               const info = await window.api.getAppInfo();
-              isPackaged = Boolean(info && info.isPackaged);
+              if (info && typeof info.isPackaged === 'boolean') {
+                isPackaged = info.isPackaged;
+              }
             }
           } catch (_) {}
 
-          if (isPackaged || brandRes.hideBrandSwitcherInExe) {
-            const card = document.querySelector('.brand-management-card');
-            if (card) {
-              card.style.display = 'none';
-              card.setAttribute('hidden', '');
-            }
+          window.DashboardApp.State.isPackaged = isPackaged;
+
+          if (isPackaged) {
+            const switcher = document.getElementById('brand-switcher-controls');
+            if (switcher) switcher.style.display = 'none';
           }
         }
       }
