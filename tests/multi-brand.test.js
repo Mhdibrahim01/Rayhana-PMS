@@ -88,11 +88,12 @@ test('Multi-Brand IPC Handlers & Access Control', async (t) => {
 
   registerBrandingIpc(fakeIpc, { BrowserWindow: fakeBrowserWindow, session });
 
-  await t.test('brand:get-config returns active brand and catalog', async () => {
+  await t.test('brand:get-config returns active brand, catalog, and hideBrandSwitcherInExe flag', async () => {
     const res = await fakeIpc.invoke('brand:get-config', {});
     assert.equal(res.success, true);
     assert.ok(res.current);
     assert.ok(res.brands);
+    assert.equal(typeof res.hideBrandSwitcherInExe, 'boolean');
   });
 
   await t.test('non-Admin role cannot switch active brand', async () => {
@@ -128,5 +129,24 @@ test('Multi-Brand IPC Handlers & Access Control', async (t) => {
       // Restore original config
       fs.writeFileSync(BRANDING_PATH, JSON.stringify(originalConfig, null, 2), 'utf8');
     }
+  });
+});
+
+test('White-Label Neutralization in UI Modals and Templates', async (t) => {
+  await t.test('dashboard.html operational modals do not leak hardcoded brand strings', () => {
+    const dashboardHtml = fs.readFileSync(path.join(ROOT_DIR, 'dashboard.html'), 'utf8');
+
+    // Payment modal subtitle
+    assert.doesNotMatch(dashboardHtml, /ريحانة للوحدات السكنية - سند سداد حجز/);
+    // Settlement modal subtitle
+    assert.doesNotMatch(dashboardHtml, /ريحانة للوحدات السكنية - احتساب الليالي وتصفية المستحقات/);
+    // User manual heading & intro
+    assert.doesNotMatch(dashboardHtml, /دليل مستخدم نظام ريحانة/);
+    assert.doesNotMatch(dashboardHtml, /Rayhana ERP User Manual/);
+  });
+
+  await t.test('dashboard.js topbar section titleMap does not hardcode brand in overview', () => {
+    const dashboardJs = fs.readFileSync(path.join(ROOT_DIR, 'dashboard.js'), 'utf8');
+    assert.doesNotMatch(dashboardJs, /overview:\s*\['ريحانة للوحدات السكنية'/);
   });
 });

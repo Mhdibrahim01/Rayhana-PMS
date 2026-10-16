@@ -12,6 +12,7 @@ const BRANDING_FILE_PATH = path.join(__dirname, '..', 'config', 'branding.json')
 
 const DEFAULT_BRANDING = {
   activeBrand: 'hotel_1',
+  hideBrandSwitcherInExe: true,
   brands: {
     hotel_1: {
       id: 'hotel_1',
@@ -127,7 +128,8 @@ function registerBrandingIpc(ipcMain, { BrowserWindow, session }) {
       success: true,
       activeBrandId: activeId,
       current: activeBrand,
-      brands: config.brands
+      brands: config.brands,
+      hideBrandSwitcherInExe: Boolean(config.hideBrandSwitcherInExe)
     };
   });
 

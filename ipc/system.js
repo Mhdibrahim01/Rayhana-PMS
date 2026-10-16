@@ -20,16 +20,14 @@ function toDataUrl(file) {
   }
   return '';
 }
-const sealUrl = toDataUrl('seal.svg');
-const signatureUrl = toDataUrl('signature.svg');
 function embedAssets(html) {
   if (!html) return '';
   return html.replace(/src=["'](assets\/[^"']+)["']/g, (match, assetPath) => {
     const dataUrl = toDataUrl(assetPath);
     return dataUrl ? `src="${dataUrl}"` : match;
   })
-  .replace(/assets\/seal\.svg/g, sealUrl)
-  .replace(/assets\/signature\.svg/g, signatureUrl);
+  .replace(/assets\/seal\.svg/g, () => toDataUrl('seal.svg'))
+  .replace(/assets\/signature\.svg/g, () => toDataUrl('signature.svg'));
 }
 module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialog, shell, db, backupScheduler, session, helpers }) {
   // 8. System Info & Database Path
@@ -38,7 +36,8 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
       dbPath: session.dbPath,
       user: session.currentUser,
       logId: session.currentLogId,
-      version: app.getVersion()
+      version: (app && typeof app.getVersion === 'function') ? app.getVersion() : '2.0.0',
+      isPackaged: Boolean(app && app.isPackaged)
     };
   });
 
@@ -111,7 +110,7 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
     try {
       const defaultName = `rayhana_backup_${helpers.getLocalDateString()}.sqlite`;
       const { canceled, filePath } = await dialog.showSaveDialog(session.mainWindow, {
-        title: 'حفظ نسخة احتياطية من قاعدة بيانات ريحانة للوحدات السكنية',
+        title: 'حفظ نسخة احتياطية من قاعدة بيانات النظام الفندقي',
         defaultPath: defaultName,
         filters: [{ name: 'SQLite Database (*.sqlite)', extensions: ['sqlite', 'db'] }]
       });
@@ -502,11 +501,9 @@ await pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(embedAss
         </html>
       `;
 
-const finalHtml = fullHtml
-  .replace(/assets\/seal\.svg/g, sealUrl)
-  .replace(/assets\/signature\.svg/g, signatureUrl);
+const finalHtml = embedAssets(fullHtml);
 
-previewWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(embedAssets(finalHtml))}`);
+previewWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(finalHtml)}`);
       return { success: true };
     } catch (err) {
       console.error('[Preview Window Error]:', err);

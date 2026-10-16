@@ -444,11 +444,13 @@ window.DashboardApp = {
     const titleEl = document.getElementById('sidebar-brand-title');
     const subEl = document.getElementById('sidebar-brand-subtitle');
     const topHeadingEl = document.getElementById('topbar-heading');
+    const topSubheadingEl = document.getElementById('topbar-subheading');
 
     if (logoEl && brand.logo) logoEl.src = brand.logo;
     if (titleEl && brand.nameAr) titleEl.textContent = brand.nameAr;
     if (subEl && brand.nameEn) subEl.textContent = brand.nameEn;
     if (topHeadingEl && brand.nameAr) topHeadingEl.textContent = brand.nameAr;
+    if (topSubheadingEl && brand.nameEn) topSubheadingEl.textContent = `${brand.nameEn} • لوحة التحكم وإدارة العمليات`;
     document.title = `لوحة التحكم | ${brand.nameAr} - ${brand.nameEn || ''}`;
   }
 

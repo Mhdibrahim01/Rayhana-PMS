@@ -94,7 +94,16 @@ module.exports = function registerAppLockIpc(ipcMain, { app, session }) {
 
     if (isValid) {
       if (session.mainWindow && !session.mainWindow.isDestroyed()) {
-        session.mainWindow.setTitle('ريحانة للوحدات السكنية | Rayhana Residential Units');
+        let brandTitle = 'نظام إدارة الفنادق والوحدات السكنية';
+        try {
+          const bPath = path.join(__dirname, '..', 'config', 'branding.json');
+          if (fs.existsSync(bPath)) {
+            const bCfg = JSON.parse(fs.readFileSync(bPath, 'utf8'));
+            const ab = bCfg?.brands?.[bCfg?.activeBrand];
+            if (ab?.nameAr) brandTitle = `${ab.nameAr} | ${ab.nameEn || ''}`;
+          }
+        } catch (_) {}
+        session.mainWindow.setTitle(brandTitle);
         if (typeof session.mainWindow.setTitleBarOverlay === 'function') {
           session.mainWindow.setTitleBarOverlay({
             color: '#ffffff',

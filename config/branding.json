@@ -1,5 +1,6 @@
 {
   "activeBrand": "hotel_1",
+  "hideBrandSwitcherInExe": true,
   "brands": {
     "hotel_1": {
       "id": "hotel_1",

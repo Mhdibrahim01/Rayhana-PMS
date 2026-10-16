@@ -119,9 +119,30 @@
 
   async function loadBrandAdminSettings() {
     try {
-      if (!window.api || typeof window.api.getBrandingConfig !== 'function') return;
+      const brandCard = document.querySelector('.brand-management-card');
+      if (!window.api || typeof window.api.getBrandingConfig !== 'function') {
+        if (brandCard) brandCard.style.display = 'none';
+        return;
+      }
+
+      let isPackaged = false;
+      try {
+        if (typeof window.api.getAppInfo === 'function') {
+          const info = await window.api.getAppInfo();
+          isPackaged = Boolean(info && info.isPackaged);
+        }
+      } catch (_) {}
+
       const res = await window.api.getBrandingConfig();
       if (res && res.success) {
+        if (isPackaged || res.hideBrandSwitcherInExe) {
+          if (brandCard) {
+            brandCard.style.display = 'none';
+            brandCard.setAttribute('hidden', '');
+          }
+          return;
+        }
+
         App.State.brands = res.brands || {};
         App.State.activeBrandId = res.activeBrandId || 'hotel_1';
         App.State.branding = res.current;

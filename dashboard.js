@@ -537,8 +537,13 @@
     });
 
     // 3. INSTANT: Update topbar text (text swap — negligible cost)
+    const currentBrand = (window.DashboardApp?.Helpers?.getActiveBrand)
+      ? window.DashboardApp.Helpers.getActiveBrand()
+      : { nameAr: 'لوحة التحكم', nameEn: 'Control Panel' };
+    const brandNameAr = currentBrand.nameAr || 'لوحة التحكم';
+    const brandNameEn = currentBrand.nameEn || 'PMS';
     const titleMap = {
-      overview: ['ريحانة للوحدات السكنية', 'Rayhana Suites • لوحة التحكم وإدارة العمليات'],
+      overview: [brandNameAr, `${brandNameEn} • لوحة التحكم وإدارة العمليات`],
       reservations: ['سجل وإدارة الحجوزات', 'عرض وتتبع جميع الحجوزات المؤكدة والمكتملة والملغاة'],
       rooms: ['إدارة الغرف الفندقية', 'متابعة حالات الإشغال والغرف المتاحة ودورة النظافة'],
       guests: ['دليل وسجل النزلاء', 'Guest Directory • بيانات النزلاء وسجل الإقامات السابقة'],
@@ -2940,8 +2945,8 @@
       return;
     }
 
-    const activeBrand = (window.DashboardApp && window.DashboardApp.Helpers && window.DashboardApp.Helpers.getActiveBrand) ? window.DashboardApp.Helpers.getActiveBrand() : { nameAr: 'ريحانة للوحدات السكنية' };
-    const hotelBrandName = activeBrand.nameAr || 'ريحانة للوحدات السكنية';
+    const activeBrand = (window.DashboardApp && window.DashboardApp.Helpers && window.DashboardApp.Helpers.getActiveBrand) ? window.DashboardApp.Helpers.getActiveBrand() : null;
+    const hotelBrandName = activeBrand?.nameAr || 'الفندق';
 
     const message = `مرحباً ${res.guest_name || 'عزيزنا النزيل'}،
 تم تأكيد حجزك في ${hotelBrandName}.
@@ -3050,6 +3055,22 @@
           window.DashboardApp.State.brands = brandRes.brands;
           window.DashboardApp.State.activeBrandId = brandRes.activeBrandId;
           window.DashboardApp.Helpers.applyBranding(brandRes.current);
+
+          let isPackaged = false;
+          try {
+            if (typeof window.api.getAppInfo === 'function') {
+              const info = await window.api.getAppInfo();
+              isPackaged = Boolean(info && info.isPackaged);
+            }
+          } catch (_) {}
+
+          if (isPackaged || brandRes.hideBrandSwitcherInExe) {
+            const card = document.querySelector('.brand-management-card');
+            if (card) {
+              card.style.display = 'none';
+              card.setAttribute('hidden', '');
+            }
+          }
         }
       }
       if (window.api && typeof window.api.onBrandChanged === 'function') {

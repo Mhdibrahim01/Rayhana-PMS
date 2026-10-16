@@ -128,6 +128,27 @@ function applyBrand(targetBrandId) {
     fs.writeFileSync(PACKAGE_PATH, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
   }
 
+  // 4. Update static titles and headings in dashboard.html and login.html
+  const dashboardHtmlPath = path.join(ROOT_DIR, 'dashboard.html');
+  if (fs.existsSync(dashboardHtmlPath)) {
+    let dHtml = fs.readFileSync(dashboardHtmlPath, 'utf8');
+    dHtml = dHtml.replace(/<title>.*?<\/title>/, `<title>لوحة التحكم | ${brand.nameAr} - ${brand.nameEn || ''}</title>`);
+    dHtml = dHtml.replace(/<h2 id="sidebar-brand-title">.*?<\/h2>/, `<h2 id="sidebar-brand-title">${brand.nameAr}</h2>`);
+    dHtml = dHtml.replace(/<p id="sidebar-brand-subtitle">.*?<\/p>/, `<p id="sidebar-brand-subtitle">${brand.nameEn || ''}</p>`);
+    dHtml = dHtml.replace(/<h1 id="topbar-heading">.*?<\/h1>/, `<h1 id="topbar-heading">${brand.nameAr}</h1>`);
+    dHtml = dHtml.replace(/<p id="topbar-subheading">.*?<\/p>/, `<p id="topbar-subheading">${brand.nameEn || ''} • لوحة التحكم وإدارة العمليات</p>`);
+    fs.writeFileSync(dashboardHtmlPath, dHtml, 'utf8');
+  }
+
+  const loginHtmlPath = path.join(ROOT_DIR, 'login.html');
+  if (fs.existsSync(loginHtmlPath)) {
+    let lHtml = fs.readFileSync(loginHtmlPath, 'utf8');
+    lHtml = lHtml.replace(/<title>.*?<\/title>/, `<title>تسجيل الدخول | ${brand.nameAr} - ${brand.nameEn || ''}</title>`);
+    lHtml = lHtml.replace(/<h1 id="login-brand-title"[^>]*>.*?<\/h1>/, `<h1 id="login-brand-title" class="login-title">${brand.nameAr}</h1>`);
+    lHtml = lHtml.replace(/<p id="login-brand-subtitle"[^>]*>.*?<\/p>/, `<p id="login-brand-subtitle" class="login-subtitle">${brand.nameEn || ''} • ${brand.subtitle || 'نظام إدارة الحجوزات الفندقية'}</p>`);
+    fs.writeFileSync(loginHtmlPath, lHtml, 'utf8');
+  }
+
   console.log('\n======================================================');
   console.log(` ✅ Brand Successfully Switched to: [${targetBrandId}]`);
   console.log('======================================================');
