@@ -2669,7 +2669,9 @@
       e.preventDefault();
       const resId = parseInt(editInvResId.value, 10);
       const guestName = editInvGuestName.value.trim();
-      const guestNationality = editInvGuestNationality ? (editInvGuestNationality.value.trim() || 'سعودي') : 'سعودي';
+      const guestNationality = editInvGuestNationality
+        ? ((window.getSelectOrCustomValue ? window.getSelectOrCustomValue(editInvGuestNationality, 'سعودي') : editInvGuestNationality.value.trim()) || 'سعودي')
+        : 'سعودي';
       const guestPhone = editInvGuestPhone.value.trim();
       const guestIdNumber = editInvGuestId.value.trim();
       const totalPrice = parseFloat(editInvTotalPrice.value) || 0;

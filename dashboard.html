@@ -969,6 +969,7 @@
                       <option value="كندي">كندي</option>
                       <option value="أخرى">أخرى (تحديد)...</option>
                     </select>
+                    <input type="text" id="new-customer-nationality-custom" class="form-control custom-select-input" placeholder="اكتب اسم الجنسية..." style="display: none; margin-top: 6px;">
                   </div>
                   <div class="form-group">
                     <label for="new-customer-phone">رقم الجوال</label>
@@ -1039,7 +1040,6 @@
                   <tr>
                     <th>معرف النزيل</th>
                     <th>اسم النزيل الكامل</th>
-                    <th>الجنسية</th>
                     <th>رقم الجوال</th>
                     <th>رقم الهوية / الجواز</th>
                     <th>عدد الإقامات المكتملة</th>
@@ -1050,7 +1050,7 @@
                          header must render for every role too - otherwise a receptionist
                          sees the ban button with no column showing its result. -->
                     <th>الحالة</th>
-                    <th style="text-align: center;">إجراءات</th>
+                    <th style="text-align: center; min-width: 90px; width: 90px;">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody id="guests-table-body"></tbody>
@@ -1607,6 +1607,7 @@
                 <option value="كندي">كندي</option>
                 <option value="أخرى">أخرى (تحديد)...</option>
               </select>
+              <input type="text" id="guest-nationality-custom" class="form-control custom-select-input" placeholder="اكتب اسم الجنسية..." style="display: none; margin-top: 6px;">
             </div>
           </div>
 
@@ -2013,6 +2014,7 @@
             <option value="كندي">كندي</option>
             <option value="أخرى">أخرى (تحديد)...</option>
           </select>
+          <input type="text" id="edit-inv-guest-nationality-custom" class="form-control custom-select-input" placeholder="اكتب اسم الجنسية..." style="display: none; margin-top: 6px;">
         </div>
 
         <!-- Financial Section -->
@@ -2111,6 +2113,7 @@
             <option value="كندي">كندي</option>
             <option value="أخرى">أخرى (تحديد)...</option>
           </select>
+          <input type="text" id="edit-guest-nationality-custom" class="form-control custom-select-input" placeholder="اكتب اسم الجنسية..." style="display: none; margin-top: 6px; font-size: 0.9rem;">
         </div>
 
         <div class="form-group" style="margin-bottom: 20px;">
@@ -2185,6 +2188,7 @@
                   <option value="زميل عمل">زميل عمل</option>
                   <option value="أخرى">أخرى (تحديد)...</option>
                 </select>
+                <input type="text" id="comp-form-rel-custom" class="form-control custom-select-input" placeholder="اكتب صلة القرابة..." style="display: none; margin-top: 6px;">
               </div>
             </div>
 
@@ -2224,6 +2228,7 @@
                   <option value="كندي">كندي</option>
                   <option value="أخرى">أخرى (تحديد)...</option>
                 </select>
+                <input type="text" id="comp-form-nat-custom" class="form-control custom-select-input" placeholder="اكتب اسم الجنسية..." style="display: none; margin-top: 6px;">
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="comp-form-phone" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">رقم الجوال</label>

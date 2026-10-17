@@ -464,27 +464,54 @@ window.DashboardApp = {
     'تركي', 'بريطاني', 'أمريكي', 'كندي', 'أوروبي'
   ];
 
+  function findOrCreateCustomInput(selectEl, placeholderText) {
+    if (!selectEl) return null;
+    const parent = selectEl.closest ? (selectEl.closest('.form-group') || selectEl.parentElement) : selectEl.parentElement;
+    if (!parent) return null;
+    let customInput = parent.querySelector('.custom-select-input');
+    if (!customInput && typeof document !== 'undefined' && document.createElement) {
+      customInput = document.createElement('input');
+      customInput.type = 'text';
+      customInput.className = 'form-control custom-select-input';
+      customInput.placeholder = placeholderText || 'يرجى التحديد...';
+      customInput.style.cssText = 'margin-top: 6px; display: none;';
+      if (selectEl.nextSibling) {
+        selectEl.parentNode.insertBefore(customInput, selectEl.nextSibling);
+      } else {
+        selectEl.parentNode.appendChild(customInput);
+      }
+    }
+    return customInput;
+  }
+
   function setSelectNationality(selectEl, value) {
     if (!selectEl) return;
     const targetVal = (value || 'سعودي').trim();
+    const customInput = findOrCreateCustomInput(selectEl, 'اكتب اسم الجنسية...');
     let found = false;
     for (let i = 0; i < selectEl.options.length; i++) {
-      if (selectEl.options[i].value === targetVal) {
+      if (selectEl.options[i].value === targetVal && targetVal !== 'أخرى') {
         selectEl.selectedIndex = i;
         found = true;
         break;
       }
     }
-    if (!found && targetVal) {
-      const opt = document.createElement('option');
-      opt.value = targetVal;
-      opt.textContent = targetVal;
-      if (selectEl.lastElementChild) {
-        selectEl.insertBefore(opt, selectEl.lastElementChild);
-      } else {
-        selectEl.appendChild(opt);
+    if (found) {
+      if (customInput) {
+        customInput.style.display = 'none';
+        customInput.value = '';
       }
-      selectEl.value = targetVal;
+    } else {
+      for (let i = 0; i < selectEl.options.length; i++) {
+        if (selectEl.options[i].value === 'أخرى') {
+          selectEl.selectedIndex = i;
+          break;
+        }
+      }
+      if (customInput) {
+        customInput.style.display = 'block';
+        customInput.value = targetVal;
+      }
     }
   }
 
@@ -492,35 +519,27 @@ window.DashboardApp = {
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('change', (e) => {
       if (!e.target || !e.target.classList) return;
-      if (e.target.classList.contains('nationality-select') && e.target.value === 'أخرى') {
-        const custom = (typeof window !== 'undefined' && window.prompt) ? window.prompt('يرجى إدخال اسم الجنسية:') : null;
-        if (custom && custom.trim()) {
-          const val = custom.trim();
-          let opt = Array.from(e.target.options).find(o => o.value === val);
-          if (!opt) {
-            opt = document.createElement('option');
-            opt.value = val;
-            opt.textContent = val;
-            e.target.insertBefore(opt, e.target.lastElementChild);
+      if (e.target.classList.contains('nationality-select')) {
+        const customInput = findOrCreateCustomInput(e.target, 'اكتب اسم الجنسية...');
+        if (customInput) {
+          if (e.target.value === 'أخرى') {
+            customInput.style.display = 'block';
+            customInput.focus();
+          } else {
+            customInput.style.display = 'none';
+            customInput.value = '';
           }
-          e.target.value = val;
-        } else {
-          e.target.value = 'سعودي';
         }
-      } else if (e.target.classList.contains('relationship-select') && e.target.value === 'أخرى') {
-        const custom = (typeof window !== 'undefined' && window.prompt) ? window.prompt('يرجى تحديد صلة القرابة:') : null;
-        if (custom && custom.trim()) {
-          const val = custom.trim();
-          let opt = Array.from(e.target.options).find(o => o.value === val);
-          if (!opt) {
-            opt = document.createElement('option');
-            opt.value = val;
-            opt.textContent = val;
-            e.target.insertBefore(opt, e.target.lastElementChild);
+      } else if (e.target.classList.contains('relationship-select')) {
+        const customInput = findOrCreateCustomInput(e.target, 'اكتب صلة القرابة...');
+        if (customInput) {
+          if (e.target.value === 'أخرى') {
+            customInput.style.display = 'block';
+            customInput.focus();
+          } else {
+            customInput.style.display = 'none';
+            customInput.value = '';
           }
-          e.target.value = val;
-        } else {
-          e.target.value = 'مرافق';
         }
       }
     });
@@ -534,35 +553,54 @@ window.DashboardApp = {
   function setSelectRelationship(selectEl, value) {
     if (!selectEl) return;
     const targetVal = (value || 'زوجة').trim();
+    const customInput = findOrCreateCustomInput(selectEl, 'اكتب صلة القرابة...');
     let found = false;
     for (let i = 0; i < selectEl.options.length; i++) {
-      if (selectEl.options[i].value === targetVal) {
+      if (selectEl.options[i].value === targetVal && targetVal !== 'أخرى') {
         selectEl.selectedIndex = i;
         found = true;
         break;
       }
     }
-    if (!found && targetVal) {
-      const opt = document.createElement('option');
-      opt.value = targetVal;
-      opt.textContent = targetVal;
-      if (selectEl.lastElementChild) {
-        selectEl.insertBefore(opt, selectEl.lastElementChild);
-      } else {
-        selectEl.appendChild(opt);
+    if (found) {
+      if (customInput) {
+        customInput.style.display = 'none';
+        customInput.value = '';
       }
-      selectEl.value = targetVal;
+    } else {
+      for (let i = 0; i < selectEl.options.length; i++) {
+        if (selectEl.options[i].value === 'أخرى') {
+          selectEl.selectedIndex = i;
+          break;
+        }
+      }
+      if (customInput) {
+        customInput.style.display = 'block';
+        customInput.value = targetVal;
+      }
     }
+  }
+
+  function getSelectOrCustomValue(selectEl, fallback = '') {
+    if (!selectEl) return fallback;
+    if (selectEl.value === 'أخرى') {
+      const customInput = findOrCreateCustomInput(selectEl);
+      const customVal = customInput ? customInput.value.trim() : '';
+      return customVal || fallback;
+    }
+    return selectEl.value.trim() || fallback;
   }
 
   App.Helpers.COMMON_NATIONALITIES = COMMON_NATIONALITIES;
   App.Helpers.COMMON_RELATIONSHIPS = COMMON_RELATIONSHIPS;
   App.Helpers.setSelectNationality = setSelectNationality;
   App.Helpers.setSelectRelationship = setSelectRelationship;
+  App.Helpers.getSelectOrCustomValue = getSelectOrCustomValue;
   App.Helpers.getActiveBrand = getActiveBrand;
   App.Helpers.applyBranding = applyBranding;
   App.Helpers.escapeHtml = escapeHtml;
   window.setSelectNationality = setSelectNationality;
   window.setSelectRelationship = setSelectRelationship;
+  window.getSelectOrCustomValue = getSelectOrCustomValue;
 
 })(window.DashboardApp);

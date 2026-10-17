@@ -1234,6 +1234,7 @@
           <select class="form-control comp-row-rel relationship-select">
             ${buildRelationshipOptions(initialRel)}
           </select>
+          <input type="text" class="form-control custom-select-input comp-row-rel-custom" data-for="rel" placeholder="اكتب صلة القرابة..." style="display: none; margin-top: 4px; font-size: 0.8rem; padding: 4px 8px;">
         </div>
       </div>
       <div class="comp-row-fields" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
@@ -1246,6 +1247,7 @@
           <select class="form-control comp-row-nat nationality-select">
             ${buildNationalityOptions(initialNat)}
           </select>
+          <input type="text" class="form-control custom-select-input comp-row-nat-custom" data-for="nat" placeholder="اكتب اسم الجنسية..." style="display: none; margin-top: 4px; font-size: 0.8rem; padding: 4px 8px;">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
           <label style="font-size: 0.75rem; margin-bottom: 2px;">الجوال</label>
@@ -1279,9 +1281,15 @@
     rows.forEach(r => {
       const name = (r.querySelector('.comp-row-name')?.value || '').trim();
       if (!name) return;
-      const relationship = (r.querySelector('.comp-row-rel')?.value || '').trim();
+      const relSelect = r.querySelector('.comp-row-rel');
+      const relationship = (relSelect?.value === 'أخرى'
+        ? (r.querySelector('.custom-select-input[data-for="rel"]')?.value || r.querySelector('.comp-row-rel-custom')?.value || '').trim()
+        : (relSelect?.value || '').trim());
       const id_number = (r.querySelector('.comp-row-id')?.value || '').trim();
-      const nationality = (r.querySelector('.comp-row-nat')?.value || '').trim() || 'سعودي';
+      const natSelect = r.querySelector('.comp-row-nat');
+      const nationality = (natSelect?.value === 'أخرى'
+        ? (r.querySelector('.custom-select-input[data-for="nat"]')?.value || r.querySelector('.comp-row-nat-custom')?.value || '').trim()
+        : (natSelect?.value || '').trim()) || 'سعودي';
       const phone = (r.querySelector('.comp-row-phone')?.value || '').trim();
       companions.push({ name, relationship, id_number, nationality, phone });
     });
@@ -1298,7 +1306,9 @@
 
     const bookingType = bookingTypeSelect ? bookingTypeSelect.value : 'عادي';
     const guestName = guestNameInput.value.trim();
-    const guestNationality = guestNationalityInput ? (guestNationalityInput.value.trim() || 'سعودي') : 'سعودي';
+    const guestNationality = guestNationalityInput
+      ? ((App.Helpers.getSelectOrCustomValue ? App.Helpers.getSelectOrCustomValue(guestNationalityInput, 'سعودي') : guestNationalityInput.value.trim()) || 'سعودي')
+      : 'سعودي';
     const companions = collectNewReservationCompanions();
     const guestPhone = guestPhoneInput.value.trim();
     const guestIdNumber = guestIdNumberInput.value.trim();
@@ -4346,7 +4356,9 @@
     addCustomerForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = newCustomerName ? newCustomerName.value.trim() : '';
-      const nationality = newCustomerNationality ? (newCustomerNationality.value.trim() || 'سعودي') : 'سعودي';
+      const nationality = newCustomerNationality
+        ? ((App.Helpers.getSelectOrCustomValue ? App.Helpers.getSelectOrCustomValue(newCustomerNationality, 'سعودي') : newCustomerNationality.value.trim()) || 'سعودي')
+        : 'سعودي';
       const phone = newCustomerPhone ? newCustomerPhone.value.trim() : '';
       const id_number = newCustomerId ? newCustomerId.value.trim() : '';
 
@@ -4843,9 +4855,13 @@
       const resId = currentManagingReservationId || parseInt(compFormResId.value, 10);
       const companionId = compFormId && compFormId.value ? parseInt(compFormId.value, 10) : null;
       const name = compFormName ? compFormName.value.trim() : '';
-      const relationship = compFormRel ? compFormRel.value.trim() : '';
+      const relationship = compFormRel
+        ? ((App.Helpers.getSelectOrCustomValue ? App.Helpers.getSelectOrCustomValue(compFormRel, '') : compFormRel.value.trim()) || '')
+        : '';
       const id_number = compFormIdNum ? compFormIdNum.value.trim() : '';
-      const nationality = compFormNat ? (compFormNat.value.trim() || 'سعودي') : 'سعودي';
+      const nationality = compFormNat
+        ? ((App.Helpers.getSelectOrCustomValue ? App.Helpers.getSelectOrCustomValue(compFormNat, 'سعودي') : compFormNat.value.trim()) || 'سعودي')
+        : 'سعودي';
       const phone = compFormPhone ? compFormPhone.value.trim() : '';
 
       if (!name) {

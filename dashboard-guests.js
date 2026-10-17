@@ -67,9 +67,11 @@
         <tr>
           <td style="font-family: monospace; font-weight: 700; color: var(--primary);">#${g.id}</td>
           <td style="font-weight: 800; color: #1e293b; font-size: 0.9rem;">
-            ${App.Helpers.escapeHtml(g.name)}
+            <div>${App.Helpers.escapeHtml(g.name)}</div>
+            <span class="badge" style="font-size: 0.72rem; font-weight: 600; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 1px 6px; border-radius: 4px; display: inline-block; margin-top: 3px;">
+              ${App.Helpers.escapeHtml(g.nationality || 'سعودي')}
+            </span>
           </td>
-          <td style="color: var(--text-secondary); font-weight: 600;">${App.Helpers.escapeHtml(g.nationality || 'سعودي')}</td>
           <td style="font-family: monospace; color: var(--text-secondary);">${App.Helpers.escapeHtml(g.phone || '-')}</td>
           <td style="color: var(--text-secondary);">${App.Helpers.escapeHtml(g.id_number || '-')}</td>
           <td>
@@ -87,8 +89,8 @@
               ${isBanned ? 'محظور' : 'نشط'}
             </span>
           </td>
-          <td style="text-align: center; white-space: nowrap;">
-            <div class="btn-row-group overview-row-actions guest-actions-list" role="group" aria-label="إجراءات النزيل" style="justify-content: center;">
+          <td style="text-align: center; white-space: nowrap; min-width: 90px;">
+            <div class="btn-row-group overview-row-actions guest-actions-list" role="group" aria-label="إجراءات النزيل" style="justify-content: center; display: inline-flex; gap: 6px; flex-wrap: nowrap;">
               <button type="button" class="btn-row icon-ghost guest-row-action" data-action="edit-guest" data-id="${g.id}" title="تعديل بيانات النزيل" aria-label="تعديل بيانات النزيل">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
@@ -378,7 +380,10 @@
       e.preventDefault();
       const guestId = parseInt(App.DOM.editGuestId.value, 10);
       const name = App.DOM.editGuestName.value.trim();
-      const nationality = (App.DOM.editGuestNationality ? App.DOM.editGuestNationality.value : '').trim() || 'سعودي';
+      const nationality = (App.Helpers.getSelectOrCustomValue
+        ? App.Helpers.getSelectOrCustomValue(App.DOM.editGuestNationality, 'سعودي')
+        : (App.DOM.editGuestNationality ? App.DOM.editGuestNationality.value : '')
+      ).trim() || 'سعودي';
       const phone = App.DOM.editGuestPhone.value.trim();
       const id_number = App.DOM.editGuestIdNumber.value.trim();
 
