@@ -97,6 +97,7 @@ const RESERVATION_LIST_SQL = `
     r.custom_nightly_price,
     r.monthly_rate_snapshot,
     r.monthly_extension_amount,
+    r.monthly_months_count,
     r.discount_amount,
     r.discount_reason,
     r.late_checkout_fee,
@@ -359,6 +360,7 @@ function getReservationById(reservationId) {
       r.custom_nightly_price,
       r.monthly_rate_snapshot,
       r.monthly_extension_amount,
+      r.monthly_months_count,
       r.discount_amount,
       r.discount_reason,
       r.late_checkout_fee,
@@ -442,6 +444,8 @@ function createReservation({
   is_early_checkin = null,
   actualCheckInAt = null,
   actual_check_in_at = null,
+  monthsCount = null,
+  months_count = null,
   overrideBan = false,
   overrideUsername = null
 }) {
@@ -533,6 +537,7 @@ function createReservation({
   const paid = roundMoney(paidAmount);
   const deposit = roundMoney(depositAmount);
   let monthlyRateSnapshot = null;
+  let stayMonths = 1;
 
   if (paid < 0) {
     throw new Error('المبلغ المدفوع لا يمكن أن يكون سالباً.');
@@ -567,7 +572,19 @@ function createReservation({
     }
     const effectiveRate = normMonthlyPrice !== null ? normMonthlyPrice : roomMonthlyPrice;
     monthlyRateSnapshot = roundMoney(effectiveRate);
-    const baseTotal = monthlyRateSnapshot;
+
+    const rawMonths = monthsCount !== null && monthsCount !== undefined ? monthsCount : months_count;
+    if (rawMonths !== null && rawMonths !== undefined) {
+      stayMonths = Math.max(1, parseInt(rawMonths, 10) || 1);
+    } else if (computedCheckOutDate) {
+      for (let m = 1; m <= 12; m++) {
+        if (getCalendarMonthCheckOut(checkInDate, m) === computedCheckOutDate) {
+          stayMonths = m;
+          break;
+        }
+      }
+    }
+    const baseTotal = roundMoney(monthlyRateSnapshot * stayMonths);
     total = Math.max(0, roundMoney(baseTotal - normDiscountAmount));
 
     // A monthly booking has an authoritative total: flat monthly rate - discount.
@@ -589,8 +606,8 @@ function createReservation({
     }
 
     if (!computedCheckOutDate) {
-      // One full calendar month, clamped at month end, rather than a fixed 30-day span.
-      computedCheckOutDate = getCalendarMonthCheckOut(checkInDate);
+      // One or more full calendar months, clamped at month end.
+      computedCheckOutDate = getCalendarMonthCheckOut(checkInDate, stayMonths);
     } else if (computedCheckOutDate <= checkInDate) {
       throw new Error('تاريخ المغادرة يجب أن يكون بعد تاريخ الوصول بشكل محدد.');
     }
@@ -691,14 +708,16 @@ function createReservation({
       }
     }
 
+    const finalStayMonths = normBookingType === 'حجز شهري' ? (stayMonths || 1) : 1;
     const resStmt = db.prepare(`
       INSERT INTO reservations (
         guest_id, room_id, check_in_date, check_out_date,
         total_price, paid_amount, deposit_amount, payment_method, payment_status, status,
         booking_type, custom_nightly_price, monthly_rate_snapshot, monthly_extension_amount,
+        monthly_months_count,
         discount_amount, discount_reason, is_early_checkin, actual_check_in_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مؤكد', ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مؤكد', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     resStmt.run([
       guestId,
@@ -714,6 +733,7 @@ function createReservation({
       normBookingType === 'حجز شهري' ? null : normCustomNightlyPrice,
       monthlyRateSnapshot,
       0,
+      finalStayMonths,
       normDiscountAmount,
       normDiscountReason,
       finalIsEarlyCheckin,
@@ -839,20 +859,25 @@ function countNights(startDate, endDate) {
   const MONTHLY_PACKAGE_NIGHTS = 30;
 
   /**
-   * The checkout date that ends one full calendar month after the given check-in, with
+   * The checkout date that ends one or more full calendar months after the given check-in, with
    * month-end clamping: 2026-07-03 -> 2026-08-03, 2026-01-31 -> 2026-02-28,
    * 2028-01-31 -> 2028-02-29 (leap year). Returns '' for anything unparseable.
    */
-  function getCalendarMonthCheckOut(checkInDateStr) {
+  function getCalendarMonthCheckOut(checkInDateStr, months = 1) {
     const value = String(checkInDateStr || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
+    const numMonths = Math.max(1, parseInt(months, 10) || 1);
     const [y, m, d] = value.split('-').map(Number);
     // m is the 1-based check-in month, so the next month is 0-based index m.
-    const lastDayOfNextMonth = new Date(y, m + 1, 0).getDate();
+    const lastDayOfNextMonth = new Date(y, m + numMonths, 0).getDate();
     const clampedDay = Math.min(d, lastDayOfNextMonth);
     // Let Date roll month index 12 over into January of the following year.
     const nextMonthStart = new Date(y, m, 1);
-    return `${nextMonthStart.getFullYear()}-${String(nextMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+    if (numMonths === 1) {
+      return `${nextMonthStart.getFullYear()}-${String(nextMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+    }
+    const targetMonthStart = new Date(y, m - 1 + numMonths, 1);
+    return `${targetMonthStart.getFullYear()}-${String(targetMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
   }
 
 /**
@@ -1023,10 +1048,12 @@ function computeContractValue(res) {
   }
   const isMonthly = res.booking_type === 'حجز شهري';
   const extensionAmount = isMonthly ? roundMoney(res.monthly_extension_amount || 0) : 0;
+  const initialMonths = Math.max(1, parseInt(res.monthly_months_count, 10) || 1);
+  const singleMonthlyRate = Number(res.monthly_rate_snapshot) > 0 ? Number(res.monthly_rate_snapshot) : MONTHLY_PACKAGE_NIGHTS * storedRate;
   // New monthly records use a flat price snapshot. Old records keep their
   // original 30 x nightly-rate calculation, including after later room edits.
   const base = isMonthly
-    ? roundMoney((Number(res.monthly_rate_snapshot) > 0 ? Number(res.monthly_rate_snapshot) : MONTHLY_PACKAGE_NIGHTS * storedRate) + extensionAmount)
+    ? roundMoney((singleMonthlyRate * initialMonths) + extensionAmount)
     : (res && res.room_id != null
         ? computeStaySegments(res, res.check_out_date).totalBaseCharge
         : roundMoney(bookedNights * storedRate));
@@ -1093,7 +1120,7 @@ function computeCheckoutSettlement(reservationId, {
     SELECT r.id, r.room_id, r.booking_type, r.check_in_date, r.check_out_date, r.total_price, r.paid_amount,
            COALESCE((SELECT SUM(amount) FROM payments WHERE reservation_id = r.id), r.paid_amount) AS ledger_paid_amount,
            r.deposit_amount,
-            r.custom_nightly_price, r.monthly_rate_snapshot, r.monthly_extension_amount,
+            r.custom_nightly_price, r.monthly_rate_snapshot, r.monthly_extension_amount, r.monthly_months_count,
             r.discount_amount, r.discount_reason, r.status,
             rm.room_number, rm.type AS room_type, rm.price_per_night
     FROM reservations r
@@ -1264,7 +1291,7 @@ function checkoutReservation(reservationId, {
            COALESCE((SELECT SUM(amount) FROM payments WHERE reservation_id = r.id), r.paid_amount) AS ledger_paid_amount,
            r.deposit_amount, r.payment_method, r.payment_status, r.booking_type,
            r.check_in_date, r.check_out_date, r.original_calculated_charge, r.status,
-            r.custom_nightly_price, r.monthly_rate_snapshot, r.monthly_extension_amount,
+            r.custom_nightly_price, r.monthly_rate_snapshot, r.monthly_extension_amount, r.monthly_months_count,
             r.discount_amount, r.discount_reason,
            r.checkout_policy, r.checkout_policy_reason, r.booked_check_out_date,
            rm.room_number, rm.type AS room_type, rm.price_per_night
@@ -1787,12 +1814,22 @@ function extendReservation({
     ? Math.max(0, roundMoney(discountAmount))
     : 0;
 
+  let extMonths = 0;
+  if (isMonthly && monthlyRate > 0) {
+    for (let m = 1; m <= 12; m++) {
+      if (cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut, m)) {
+        extMonths = m;
+        break;
+      }
+    }
+  }
+
   let baseCost;
   if (isMonthly && monthlyRate > 0) {
-    if (cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut)) {
+    if (extMonths > 0) {
       baseCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)))
         ? roundMoney(additionalCost)
-        : monthlyRate;
+        : roundMoney(extMonths * monthlyRate);
     } else if (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost))) {
       baseCost = roundMoney(additionalCost);
     } else {
@@ -1803,7 +1840,7 @@ function extendReservation({
   }
 
   const calculatedCost = Math.max(0, roundMoney(baseCost - normDiscountAmount));
-  const calcAdditionalCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)) && (!isMonthly || cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut)))
+  const calcAdditionalCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)) && (!isMonthly || extMonths > 0))
     ? roundMoney(additionalCost)
     : calculatedCost;
 

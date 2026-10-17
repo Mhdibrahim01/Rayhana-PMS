@@ -165,29 +165,31 @@
    * month (2026-07-03 + 30 = 2026-08-02, one day short of the month it was meant to
    * book) and could never represent a 31-day span at all.
    */
-  function getCalendarMonthCheckOut(checkInDateStr) {
+  function getCalendarMonthCheckOut(checkInDateStr, months = 1) {
     if (!checkInDateStr) return '';
+    const numMonths = Math.max(1, parseInt(months, 10) || 1);
     const parts = String(checkInDateStr).split('-').map(Number);
     if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) return '';
     const [y, m, d] = parts;
 
     // m is the 1-based check-in month, so the next month is 0-based index m.
-  // new Date(y, m + 1, 0) is day 0 of the month AFTER that -> its .getDate() is the
-  // next month's last day, which is what we clamp against.
-  const lastDayOfNextMonth = new Date(y, m + 1, 0).getDate();
-  const clampedDay = Math.min(d, lastDayOfNextMonth);
-  // Let Date normalise month index 12 back into January of the following year.
-  const nextMonthStart = new Date(y, m, 1);
-  const nextY = nextMonthStart.getFullYear();
-  const nextM = nextMonthStart.getMonth() + 1;
-  return `${nextY}-${String(nextM).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+    const lastDayOfNextMonth = new Date(y, m + numMonths, 0).getDate();
+    const clampedDay = Math.min(d, lastDayOfNextMonth);
+    // Let Date roll month index 12 over into January of the following year.
+    const nextMonthStart = new Date(y, m, 1);
+    if (numMonths === 1) {
+      return `${nextMonthStart.getFullYear()}-${String(nextMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+    }
+    const targetMonthStart = new Date(y, m - 1 + numMonths, 1);
+    return `${targetMonthStart.getFullYear()}-${String(targetMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
   }
 
   // Kept for legacy invoice display; newly created monthly bookings use a flat
   // room-specific monthly amount saved on the reservation.
   const MONTHLY_PACKAGE_NIGHTS = 30;
   function getMonthlyPackageTotal(effectiveRate, discount) {
-    return Math.max(0, roundMoney(effectiveRate - (discount || 0)));
+    const months = arguments.length > 2 ? Math.max(1, parseInt(arguments[2], 10) || 1) : 1;
+    return Math.max(0, roundMoney((effectiveRate * months) - (discount || 0)));
   }
   function getOperationalBusinessDate() {
     return App.State.businessDate || '';
@@ -553,6 +555,7 @@
       isPaidAmountCustomized = false;
       updateRemainingBalance();
     } else if (bType === 'حجز شهري') {
+      if (monthlyDurationContainer) monthlyDurationContainer.style.display = 'block';
       if (checkOutInput) {
         checkOutInput.disabled = false;
         checkOutInput.setAttribute('required', 'required');
@@ -565,9 +568,10 @@
       }
       if (priceHint) priceHint.style.display = 'none';
 
-      // Calendar month: same day next month, clamped at month end.
+      // Calendar month: same day next month (or n months), clamped at month end.
+      const months = (monthlyDurationSelect && parseInt(monthlyDurationSelect.value, 10)) || 1;
       if (checkInInput && checkInInput.value) {
-        const calendarOut = getCalendarMonthCheckOut(checkInInput.value);
+        const calendarOut = months > 1 ? getCalendarMonthCheckOut(checkInInput.value, months) : getCalendarMonthCheckOut(checkInInput.value);
         if (calendarOut) checkOutInput.value = calendarOut;
       }
 
@@ -575,6 +579,7 @@
       // stay synchronized when switching into monthly booking mode.
       calculatePrice(false);
     } else if (bType === 'استخدام يومي') {
+      if (monthlyDurationContainer) monthlyDurationContainer.style.display = 'none';
       if (checkOutInput) {
         checkOutInput.disabled = false;
         checkOutInput.setAttribute('required', 'required');
@@ -588,6 +593,7 @@
       if (priceHint) priceHint.style.display = 'none';
       calculatePrice(false);
     } else {
+      if (monthlyDurationContainer) monthlyDurationContainer.style.display = 'none';
       // Normal booking ('عادي')
       if (checkOutInput) {
         checkOutInput.disabled = false;
@@ -613,6 +619,24 @@
     }
     updateMinimumCheckoutDate();
   }
+
+  const monthlyDurationContainer = document.getElementById('monthly-duration-container');
+  const monthlyDurationSelect = document.getElementById('monthly-duration-select');
+  if (monthlyDurationSelect) {
+    monthlyDurationSelect.addEventListener('change', () => {
+      calculatePrice(!isPaidAmountCustomized);
+    });
+  }
+  const quickMonthButtons = document.querySelectorAll('.btn-quick-month');
+  quickMonthButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.months;
+      if (m && monthlyDurationSelect) {
+        monthlyDurationSelect.value = m;
+        calculatePrice(!isPaidAmountCustomized);
+      }
+    });
+  });
 
   if (bookingTypeSelect) {
     bookingTypeSelect.addEventListener('change', handleBookingTypeChange);
@@ -663,18 +687,31 @@
     }
 
     if (bType === 'حجز شهري') {
+      const durationSelect = document.getElementById('monthly-duration-select');
+      const months = (durationSelect && parseInt(durationSelect.value, 10)) || 1;
       if (checkInInput.value) {
-        const calendarOut = getCalendarMonthCheckOut(checkInInput.value);
+        const calendarOut = months > 1 ? getCalendarMonthCheckOut(checkInInput.value, months) : getCalendarMonthCheckOut(checkInInput.value);
         if (calendarOut) checkOutInput.value = calendarOut;
       }
-      const netTotal = getMonthlyPackageTotal(effectiveRate, discount);
+      const netTotal = getMonthlyPackageTotal(effectiveRate, discount, months);
       totalPriceInput.value = netTotal.toFixed(2);
 
+      const durationBadge = document.getElementById('monthly-duration-badge');
+      const packageSubtotal = roundMoney(effectiveRate);
+      const totalMonthlyCharge = roundMoney(packageSubtotal * months);
+      if (durationBadge) {
+        const mLabel = months === 1 ? '1 شهر تقويمي' : (months === 2 ? 'شهران تقويميان' : `${months} أشهر تقويمية`);
+        durationBadge.textContent = `${mLabel} (${totalMonthlyCharge.toLocaleString()} ر.س)`;
+      }
+
       if (priceCalculationBreakdown) {
+        const monthsText = months === 1 ? 'شهر' : (months === 2 ? 'شهران' : `${months} أشهر`);
         if (discount > 0) {
           priceCalculationBreakdown.style.display = 'inline';
-          const packageSubtotal = roundMoney(effectiveRate);
-          priceCalculationBreakdown.textContent = `(قبل الخصم: ${packageSubtotal.toFixed(2)} - خصم: ${discount.toFixed(2)})`;
+          priceCalculationBreakdown.textContent = `(${monthsText} × ${effectiveRate.toLocaleString()} = ${totalMonthlyCharge.toFixed(2)} - خصم: ${discount.toFixed(2)})`;
+        } else if (months > 1) {
+          priceCalculationBreakdown.style.display = 'inline';
+          priceCalculationBreakdown.textContent = `(${monthsText} × ${effectiveRate.toLocaleString()} = ${totalMonthlyCharge.toFixed(2)} ر.س)`;
         } else {
           priceCalculationBreakdown.style.display = 'none';
         }
@@ -758,7 +795,9 @@
     // A monthly booking is a calendar month, so moving the arrival date must move the
     // departure with it rather than leaving a stale span that no longer equals one month.
     if (bookingTypeSelect && bookingTypeSelect.value === 'حجز شهري' && checkInInput.value) {
-      const calendarOut = getCalendarMonthCheckOut(checkInInput.value);
+      const durSelect = document.getElementById('monthly-duration-select');
+      const mCount = (durSelect && parseInt(durSelect.value, 10)) || 1;
+      const calendarOut = mCount > 1 ? getCalendarMonthCheckOut(checkInInput.value, mCount) : getCalendarMonthCheckOut(checkInInput.value);
       if (calendarOut) checkOutInput.value = calendarOut;
     }
     updateMinimumCheckoutDate();
@@ -1124,6 +1163,8 @@
     const customNightlyPrice = bookingType === 'حجز شهري' ? null : selectedRate;
     const discountAmount = (discountAmountInput && discountAmountInput.value !== '') ? parseFloat(discountAmountInput.value) : 0;
     const discountReason = discountReasonInput ? discountReasonInput.value.trim() : '';
+    const durationSelect = document.getElementById('monthly-duration-select');
+    const monthsCount = bookingType === 'حجز شهري' && durationSelect ? (parseInt(durationSelect.value, 10) || 1) : 1;
 
     // Strict Frontend Validation
     const validation = validateReservationInputs({
@@ -1168,6 +1209,7 @@
         customNightlyPrice,
         discountAmount,
         discountReason,
+        monthsCount,
         isEarlyCheckin: isEarlyCheckinCheckbox ? (isEarlyCheckinCheckbox.checked ? 1 : 0) : null
       });
 
@@ -1198,6 +1240,7 @@
             customNightlyPrice,
             discountAmount,
             discountReason,
+            monthsCount,
             isEarlyCheckin: isEarlyCheckinCheckbox ? (isEarlyCheckinCheckbox.checked ? 1 : 0) : null,
             overrideBan: true
           });
@@ -3381,10 +3424,21 @@
         ? Number(currentExtendingReservation.monthly_price)
         : roundMoney((currentExtendingReservation.price_per_night || 0) * 30));
 
+    let extMonths = 0;
+    if (isMonthlyReservation && monthlyRate > 0 && typeof getCalendarMonthCheckOut === 'function') {
+      for (let m = 1; m <= 12; m++) {
+        if (newDateStr === getCalendarMonthCheckOut(oldDateStr, m)) {
+          extMonths = m;
+          break;
+        }
+      }
+    }
+
     let baseCost;
-    if (isMonthlyReservation && monthlyRate > 0 && typeof getCalendarMonthCheckOut === 'function' && newDateStr === getCalendarMonthCheckOut(oldDateStr)) {
-      baseCost = monthlyRate;
-      if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${monthlyRate.toLocaleString()} ر.س (شهر تقويمي)`;
+    if (extMonths > 0) {
+      baseCost = roundMoney(extMonths * monthlyRate);
+      const monthsLabel = extMonths === 1 ? 'شهر تقويمي' : (extMonths === 2 ? 'شهران تقويميان' : `${extMonths} أشهر تقويمية`);
+      if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${baseCost.toLocaleString()} ر.س (${monthsLabel})`;
     } else {
       baseCost = roundMoney(currentCalcExtraNights * nightlyRate);
       if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${nightlyRate.toLocaleString()} ر.س`;
@@ -3465,13 +3519,25 @@
     if (extendCurrentCheckoutPreview) extendCurrentCheckoutPreview.textContent = res.check_out_date;
 
     const isMonthlyReservation = res.booking_type === 'حجز شهري';
+    const extendMonthlyPillsContainer = document.getElementById('extend-monthly-pills-container');
+    if (extendMonthlyPillsContainer) {
+      extendMonthlyPillsContainer.style.display = isMonthlyReservation ? 'block' : 'none';
+    }
+
     const effectiveNightlyRate = (!isMonthlyReservation && res.custom_nightly_price != null && !isNaN(Number(res.custom_nightly_price)))
       ? parseFloat(res.custom_nightly_price)
       : parseFloat(res.price_per_night || 0);
 
     if (extendNightlyRatePreview) {
-      const customBadge = (res.custom_nightly_price != null && !isNaN(Number(res.custom_nightly_price))) ? ' (سعر خاص)' : '';
-      extendNightlyRatePreview.textContent = `${effectiveNightlyRate.toLocaleString()} ريال / ليلة${customBadge}`;
+      if (isMonthlyReservation) {
+        const mRate = Number(res.monthly_rate_snapshot) > 0
+          ? Number(res.monthly_rate_snapshot)
+          : (Number(res.monthly_price) > 0 ? Number(res.monthly_price) : roundMoney((res.price_per_night || 0) * 30));
+        extendNightlyRatePreview.textContent = `${mRate.toLocaleString()} ريال / شهر تقويمي`;
+      } else {
+        const customBadge = (res.custom_nightly_price != null && !isNaN(Number(res.custom_nightly_price))) ? ' (سعر خاص)' : '';
+        extendNightlyRatePreview.textContent = `${effectiveNightlyRate.toLocaleString()} ريال / ليلة${customBadge}`;
+      }
     }
 
     if (extendNightlyRateInput) {
@@ -3563,6 +3629,20 @@
       }
 
       if (extendNewCheckoutDate) {
+        extendNewCheckoutDate.value = newDateStr;
+        updateExtendStayCalculations();
+      }
+    });
+  });
+
+  const quickExtendMonthButtons = document.querySelectorAll('.btn-quick-extend-month');
+  quickExtendMonthButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!currentExtendingReservation || !currentExtendingReservation.check_out_date) return;
+      const months = parseInt(btn.dataset.months, 10);
+      if (!months || isNaN(months)) return;
+      const newDateStr = getCalendarMonthCheckOut(currentExtendingReservation.check_out_date, months);
+      if (newDateStr && extendNewCheckoutDate) {
         extendNewCheckoutDate.value = newDateStr;
         updateExtendStayCalculations();
       }

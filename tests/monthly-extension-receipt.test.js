@@ -16,6 +16,15 @@ const connection = require('../db/connection');
 const { assertDatabaseIntegrity, withSafeDatabase } = require('./helpers/safe-temp-db');
 const { addDays, addRoom, createReservation } = require('./helpers/fixtures');
 
+function getTestCalendarMonthCheckOut(checkInDateStr, months = 1) {
+  const [y, m, d] = String(checkInDateStr).split('-').map(Number);
+  const numMonths = Math.max(1, parseInt(months, 10) || 1);
+  const lastDayOfTargetMonth = new Date(y, m + numMonths, 0).getDate();
+  const clampedDay = Math.min(d, lastDayOfTargetMonth);
+  const targetMonth = new Date(y, m - 1 + numMonths, 1);
+  return `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+}
+
 test('monthly extension receipts: independent receipt cycle & clean accounting', async t => {
   await withSafeDatabase(async (appDb, conn) => {
     const today = appDb.getLocalDateString();
@@ -113,6 +122,86 @@ test('monthly extension receipts: independent receipt cycle & clean accounting',
       assert.ok(dashboardHtml.includes('id="invoice-receipt-tabs-bar"'), 'HTML must have invoice-receipt-tabs-bar');
       assert.ok(dashboardHtml.includes('id="invoice-receipt-tabs-container"'), 'HTML must have invoice-receipt-tabs-container');
       assert.ok(dashboardHtml.includes('id="invoice-active-tab-indicator"'), 'HTML must have invoice-active-tab-indicator');
+
+      // Multi-month duration options in HTML
+      assert.ok(dashboardHtml.includes('id="monthly-duration-container"'), 'HTML must have monthly-duration-container');
+      assert.ok(dashboardHtml.includes('id="monthly-duration-select"'), 'HTML must have monthly-duration-select');
+      assert.ok(dashboardHtml.includes('class="btn btn-secondary btn-sm btn-quick-month"'), 'HTML must have btn-quick-month');
+      assert.ok(dashboardHtml.includes('id="extend-monthly-pills-container"'), 'HTML must have extend-monthly-pills-container');
+      assert.ok(dashboardHtml.includes('class="btn btn-secondary btn-sm btn-quick-extend-month"'), 'HTML must have btn-quick-extend-month');
+    });
+
+    await t.test('multi-month initial reservation (3 months) calculates duration and contract value accurately', () => {
+      const room = addRoom('MREC-103', 150);
+      const start1 = today;
+      const expectedCheckout = getTestCalendarMonthCheckOut(start1, 3);
+
+      const resResult = appDb.createReservation({
+        guestName: 'نزيل ثلاثة أشهر',
+        guestPhone: '0501234567',
+        roomId: room.id,
+        checkInDate: start1,
+        totalPrice: monthlyRate * 3,
+        paidAmount: monthlyRate * 3,
+        bookingType: 'حجز شهري',
+        monthlyPrice: monthlyRate,
+        monthsCount: 3
+      });
+
+      assert.ok(resResult && resResult.success, 'Multi-month booking must succeed');
+      const resId = resResult.reservationId;
+      const resRow = appDb.getReservationById(resId);
+
+      assert.equal(resRow.monthly_months_count, 3, 'monthly_months_count should be 3');
+      assert.equal(resRow.total_price, monthlyRate * 3, 'Total price is 3 * 4500 = 13500');
+      assert.equal(resRow.check_out_date, expectedCheckout, 'Checkout date should span 3 calendar months');
+
+      const contract = appDb.computeContractValue(resRow);
+      assert.equal(contract.contractValue, monthlyRate * 3, 'Contract value must equal 3 * monthlyRate');
+      assertDatabaseIntegrity(connection, 'multi-month booking integrity');
+    });
+
+    await t.test('multi-month extension (+2 months) calculates extension cost and preserves contract value', () => {
+      const room = addRoom('MREC-104', 150);
+      const start1 = today;
+
+      const resResult = appDb.createReservation({
+        guestName: 'نزيل تمديد شهرين',
+        guestPhone: '0507654321',
+        roomId: room.id,
+        checkInDate: start1,
+        totalPrice: monthlyRate,
+        paidAmount: monthlyRate,
+        bookingType: 'حجز شهري',
+        monthlyPrice: monthlyRate,
+        monthsCount: 1
+      });
+
+      const resId = resResult.reservationId;
+      const initialRes = appDb.getReservationById(resId);
+      const initialCheckout = initialRes.check_out_date;
+
+      // Extend by 2 calendar months
+      const targetNewCheckout = getTestCalendarMonthCheckOut(initialCheckout, 2);
+      const extendRes = appDb.extendReservation({
+        reservationId: resId,
+        newCheckOutDate: targetNewCheckout,
+        settleAmount: monthlyRate * 2,
+        paymentMethod: 'مدى',
+        notes: 'تمديد شهرين تقويميين'
+      });
+
+      assert.ok(extendRes.success, '2-month extension must succeed');
+      assert.equal(extendRes.additionalCost, monthlyRate * 2, 'Extension cost must be 2 * 4500 = 9000');
+      assert.equal(extendRes.cycleCost, monthlyRate * 2);
+
+      const updatedRes = appDb.getReservationById(resId);
+      assert.equal(updatedRes.total_price, monthlyRate * 3, 'New total price is 4500 + 9000 = 13500');
+      assert.equal(updatedRes.check_out_date, targetNewCheckout);
+
+      const contract = appDb.computeContractValue(updatedRes);
+      assert.equal(contract.contractValue, monthlyRate * 3, 'Contract value after extension must be 13500');
+      assertDatabaseIntegrity(connection, 'multi-month extension integrity');
     });
   });
 });

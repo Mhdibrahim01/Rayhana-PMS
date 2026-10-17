@@ -167,6 +167,7 @@ async function init(dbPath) {
         custom_nightly_price REAL,
         monthly_rate_snapshot REAL,
         monthly_extension_amount REAL DEFAULT 0,
+        monthly_months_count INTEGER DEFAULT 1,
         discount_amount REAL DEFAULT 0,
         discount_reason TEXT,
         late_checkout_fee REAL DEFAULT 0,
@@ -354,7 +355,8 @@ async function init(dbPath) {
       { table: 'reservation_transfers', column: 'from_monthly_price', sql: 'ALTER TABLE reservation_transfers ADD COLUMN from_monthly_price REAL' },
       { table: 'reservation_transfers', column: 'to_monthly_price', sql: 'ALTER TABLE reservation_transfers ADD COLUMN to_monthly_price REAL' },
       { table: 'payments', column: 'period_start_date', sql: 'ALTER TABLE payments ADD COLUMN period_start_date TEXT' },
-      { table: 'payments', column: 'period_end_date', sql: 'ALTER TABLE payments ADD COLUMN period_end_date TEXT' }
+      { table: 'payments', column: 'period_end_date', sql: 'ALTER TABLE payments ADD COLUMN period_end_date TEXT' },
+      { table: 'reservations', column: 'monthly_months_count', sql: 'ALTER TABLE reservations ADD COLUMN monthly_months_count INTEGER DEFAULT 1' }
     ];
     for (const migration of migrations) {
       try {
