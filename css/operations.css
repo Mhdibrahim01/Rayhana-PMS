@@ -1228,9 +1228,13 @@
 
 #autofill-guest-status { grid-area: autofill; margin-bottom: 0 !important; }
 #banned-guest-warning { grid-area: banned; margin-bottom: 0 !important; }
+#reservation-form > section.guest-info-card,
 #reservation-form > section:nth-of-type(1) { grid-area: guest; }
+#reservation-form > section.stay-details-card,
 #reservation-form > section:nth-of-type(2) { grid-area: stay; }
+#reservation-form > section.pricing-card,
 #reservation-form > section:nth-of-type(3) { grid-area: pricing; }
+#reservation-form > section.payment-card,
 #reservation-form > section:nth-of-type(4) { grid-area: payment; }
 #reservation-form > .modal-layout__footer { grid-area: footer; }
 

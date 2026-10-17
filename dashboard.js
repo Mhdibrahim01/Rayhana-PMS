@@ -2633,7 +2633,13 @@
       }
       if (editInvResId) editInvResId.value = currentInvoiceData.id;
       if (editInvGuestName) editInvGuestName.value = currentInvoiceData.guest_name || '';
-      if (editInvGuestNationality) editInvGuestNationality.value = currentInvoiceData.guest_nationality || 'سعودي';
+      if (editInvGuestNationality) {
+        if (window.setSelectNationality) {
+          window.setSelectNationality(editInvGuestNationality, currentInvoiceData.guest_nationality || 'سعودي');
+        } else {
+          editInvGuestNationality.value = currentInvoiceData.guest_nationality || 'سعودي';
+        }
+      }
       if (editInvGuestPhone) editInvGuestPhone.value = currentInvoiceData.guest_phone || '';
       if (editInvGuestId) editInvGuestId.value = currentInvoiceData.guest_id_number || '';
       if (editInvTotalPrice) editInvTotalPrice.value = currentInvoiceData.total_price || 0;

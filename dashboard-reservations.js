@@ -944,7 +944,11 @@
             highlightField(guestNameInput);
           }
           if (guestNationalityInput && guest.nationality) {
-            guestNationalityInput.value = guest.nationality;
+            if (window.setSelectNationality) {
+              window.setSelectNationality(guestNationalityInput, guest.nationality);
+            } else {
+              guestNationalityInput.value = guest.nationality;
+            }
             highlightField(guestNationalityInput);
           }
 
@@ -1170,36 +1174,78 @@
     return { valid: true };
   }
 
+  const RES_COMMON_NATIONALITIES = [
+    'سعودي', 'إماراتي', 'كويتي', 'بحريني', 'عماني', 'قطري',
+    'مصري', 'يمني', 'سوداني', 'سوري', 'أردني', 'لبناني',
+    'فلسطيني', 'عراقي', 'مغربي', 'جزائري', 'تونسي',
+    'هندي', 'باكستاني', 'بنجلاديشي', 'فلبيني', 'إندونيسي',
+    'تركي', 'بريطاني', 'أمريكي', 'كندي'
+  ];
+
+  const RES_COMMON_RELATIONSHIPS = [
+    'زوجة', 'زوج', 'ابن', 'ابنة', 'والد', 'والدة', 'أخ', 'أخت',
+    'سائق', 'خادمة', 'مرافق شخصي', 'صديق', 'زميل عمل'
+  ];
+
+  function buildNationalityOptions(selectedValue = 'سعودي') {
+    const val = (selectedValue || 'سعودي').trim();
+    const isCustom = val && !RES_COMMON_NATIONALITIES.includes(val);
+    let html = RES_COMMON_NATIONALITIES.map(n => `<option value="${escapeHtml(n)}"${n === val ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('');
+    if (isCustom) {
+      html += `<option value="${escapeHtml(val)}" selected>${escapeHtml(val)}</option>`;
+    }
+    html += '<option value="أخرى">أخرى (تحديد)...</option>';
+    return html;
+  }
+
+  function buildRelationshipOptions(selectedValue = 'زوجة') {
+    const val = (selectedValue || 'زوجة').trim();
+    const isCustom = val && !RES_COMMON_RELATIONSHIPS.includes(val);
+    let html = RES_COMMON_RELATIONSHIPS.map(r => `<option value="${escapeHtml(r)}"${r === val ? ' selected' : ''}>${escapeHtml(r)}</option>`).join('');
+    if (isCustom) {
+      html += `<option value="${escapeHtml(val)}" selected>${escapeHtml(val)}</option>`;
+    }
+    html += '<option value="أخرى">أخرى (تحديد)...</option>';
+    return html;
+  }
+
   function addNewReservationCompanionRow(compData = {}) {
     if (!newResCompanionsList) return;
     if (newResNoCompanionsHint) newResNoCompanionsHint.style.display = 'none';
 
     const row = document.createElement('div');
     row.className = 'new-res-companion-row';
-    row.style.cssText = 'background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; position: relative;';
+    row.style.cssText = 'background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; position: relative; margin-bottom: 8px;';
+    const initialNat = compData.nationality || 'سعودي';
+    const initialRel = compData.relationship || 'زوجة';
+
     row.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
         <span style="font-size: 0.8rem; font-weight: 700; color: #475569;">مرافق</span>
         <button type="button" class="btn btn-sm btn-remove-comp-row" style="background: none; border: none; color: #ef4444; font-size: 1.1rem; cursor: pointer; padding: 0 4px; line-height: 1;" title="حذف المرافق">&times;</button>
       </div>
-      <div class="form-row" style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; margin-bottom: 8px;">
+      <div class="comp-row-fields" style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; margin-bottom: 8px;">
         <div class="form-group" style="margin-bottom: 0;">
           <label style="font-size: 0.75rem; margin-bottom: 2px;">اسم المرافق *</label>
           <input type="text" class="form-control comp-row-name" placeholder="الاسم الكامل" value="${escapeHtml(compData.name || '')}" required>
         </div>
         <div class="form-group" style="margin-bottom: 0;">
           <label style="font-size: 0.75rem; margin-bottom: 2px;">صلة القرابة</label>
-          <input type="text" class="form-control comp-row-rel" list="common-relationships" placeholder="صلة القرابة" value="${escapeHtml(compData.relationship || '')}">
+          <select class="form-control comp-row-rel relationship-select">
+            ${buildRelationshipOptions(initialRel)}
+          </select>
         </div>
       </div>
-      <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+      <div class="comp-row-fields" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
         <div class="form-group" style="margin-bottom: 0;">
           <label style="font-size: 0.75rem; margin-bottom: 2px;">الهوية / الجواز</label>
           <input type="text" class="form-control comp-row-id" placeholder="الهوية / الجواز" value="${escapeHtml(compData.id_number || '')}">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
           <label style="font-size: 0.75rem; margin-bottom: 2px;">الجنسية</label>
-          <input type="text" class="form-control comp-row-nat" list="common-nationalities" placeholder="الجنسية" value="${escapeHtml(compData.nationality || 'سعودي')}">
+          <select class="form-control comp-row-nat nationality-select">
+            ${buildNationalityOptions(initialNat)}
+          </select>
         </div>
         <div class="form-group" style="margin-bottom: 0;">
           <label style="font-size: 0.75rem; margin-bottom: 2px;">الجوال</label>
@@ -1366,7 +1412,10 @@
           handleBookingTypeChange();
         }
         guestNameInput.value = '';
-        if (guestNationalityInput) guestNationalityInput.value = 'سعودي';
+        if (guestNationalityInput) {
+          if (window.setSelectNationality) window.setSelectNationality(guestNationalityInput, 'سعودي');
+          else guestNationalityInput.value = 'سعودي';
+        }
         resetNewReservationCompanions();
         guestPhoneInput.value = '';
         guestIdNumberInput.value = '';
@@ -1623,7 +1672,10 @@
     isPaidAmountCustomized = false;
     unlockRoomSelect();
     resetNewReservationCompanions();
-    if (guestNationalityInput) guestNationalityInput.value = 'سعودي';
+    if (guestNationalityInput) {
+      if (window.setSelectNationality) window.setSelectNationality(guestNationalityInput, 'سعودي');
+      else guestNationalityInput.value = 'سعودي';
+    }
   }
 
   if (btnOpenNewReservationModal) {
@@ -1886,11 +1938,10 @@
         <tr class="${isRowLate ? 'late-checkout-row' : ''}">
           <td style="font-family: monospace; font-weight: 700; color: var(--primary); white-space: nowrap;">#${r.id}</td>
           <td class="res-cell-guest">
-            <div class="res-guest-name">
-              ${escapeHtml(r.guest_name)}
-              ${r.guest_nationality ? `<span class="res-guest-nat-tag" style="font-size: 0.72rem; font-weight: 600; color: #475569; background: #f1f5f9; padding: 1px 6px; border-radius: 4px; margin-right: 6px;">${escapeHtml(r.guest_nationality)}</span>` : ''}
-            </div>
+            <div class="res-guest-name">${escapeHtml(r.guest_name)}</div>
             <div class="res-guest-meta">
+              ${r.guest_nationality ? `<span class="res-guest-nat-tag" style="font-size: 0.72rem; font-weight: 600; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 1px 6px; border-radius: 4px; display: inline-block;">${escapeHtml(r.guest_nationality)}</span>` : ''}
+              ${r.guest_nationality && (r.guest_id_number || r.guest_phone) ? `<span class="res-meta-dot">•</span>` : ''}
               ${r.guest_id_number ? `<span>هوية: ${escapeHtml(r.guest_id_number)}</span>` : ''}
               ${r.guest_id_number && r.guest_phone ? `<span class="res-meta-dot">•</span>` : ''}
               ${r.guest_phone ? `<span dir="ltr"><bdi>${escapeHtml(r.guest_phone)}</bdi></span>` : ''}
@@ -4672,12 +4723,18 @@
   function resetCompanionForm() {
     if (compFormId) compFormId.value = '';
     if (compFormName) compFormName.value = '';
-    if (compFormRel) compFormRel.value = '';
+    if (compFormRel) {
+      if (window.setSelectRelationship) window.setSelectRelationship(compFormRel, 'زوجة');
+      else compFormRel.value = 'زوجة';
+    }
     if (compFormIdNum) compFormIdNum.value = '';
-    if (compFormNat) compFormNat.value = 'سعودي';
+    if (compFormNat) {
+      if (window.setSelectNationality) window.setSelectNationality(compFormNat, 'سعودي');
+      else compFormNat.value = 'سعودي';
+    }
     if (compFormPhone) compFormPhone.value = '';
     if (btnCancelEditComp) btnCancelEditComp.style.display = 'none';
-    if (btnSaveComp) btnSaveComp.textContent = 'حفظ المرافق ✓';
+    if (btnSaveComp) btnSaveComp.textContent = 'إضافة المرافق +';
     if (companionFormTitle) companionFormTitle.textContent = '+ إضافة مرافق جديد';
   }
 
@@ -4728,9 +4785,15 @@
         btn.addEventListener('click', () => {
           if (compFormId) compFormId.value = btn.dataset.id;
           if (compFormName) compFormName.value = btn.dataset.name;
-          if (compFormRel) compFormRel.value = btn.dataset.rel;
+          if (compFormRel) {
+            if (window.setSelectRelationship) window.setSelectRelationship(compFormRel, btn.dataset.rel || 'مرافق');
+            else compFormRel.value = btn.dataset.rel || '';
+          }
           if (compFormIdNum) compFormIdNum.value = btn.dataset.idnum;
-          if (compFormNat) compFormNat.value = btn.dataset.nat || 'سعودي';
+          if (compFormNat) {
+            if (window.setSelectNationality) window.setSelectNationality(compFormNat, btn.dataset.nat || 'سعودي');
+            else compFormNat.value = btn.dataset.nat || 'سعودي';
+          }
           if (compFormPhone) compFormPhone.value = btn.dataset.phone;
           if (btnCancelEditComp) btnCancelEditComp.style.display = 'inline-block';
           if (btnSaveComp) btnSaveComp.textContent = 'حفظ التعديل ✓';

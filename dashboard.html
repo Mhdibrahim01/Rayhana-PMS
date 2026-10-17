@@ -940,7 +940,35 @@
                   </div>
                   <div class="form-group">
                     <label for="new-customer-nationality">الجنسية</label>
-                    <input type="text" id="new-customer-nationality" list="common-nationalities" class="form-control" value="سعودي" placeholder="الجنسية">
+                    <select id="new-customer-nationality" class="form-control nationality-select">
+                      <option value="سعودي" selected>سعودي</option>
+                      <option value="إماراتي">إماراتي</option>
+                      <option value="كويتي">كويتي</option>
+                      <option value="بحريني">بحريني</option>
+                      <option value="عماني">عماني</option>
+                      <option value="قطري">قطري</option>
+                      <option value="مصري">مصري</option>
+                      <option value="يمني">يمني</option>
+                      <option value="سوداني">سوداني</option>
+                      <option value="سوري">سوري</option>
+                      <option value="أردني">أردني</option>
+                      <option value="لبناني">لبناني</option>
+                      <option value="فلسطيني">فلسطيني</option>
+                      <option value="عراقي">عراقي</option>
+                      <option value="مغربي">مغربي</option>
+                      <option value="جزائري">جزائري</option>
+                      <option value="تونسي">تونسي</option>
+                      <option value="هندي">هندي</option>
+                      <option value="باكستاني">باكستاني</option>
+                      <option value="بنجلاديشي">بنجلاديشي</option>
+                      <option value="فلبيني">فلبيني</option>
+                      <option value="إندونيسي">إندونيسي</option>
+                      <option value="تركي">تركي</option>
+                      <option value="بريطاني">بريطاني</option>
+                      <option value="أمريكي">أمريكي</option>
+                      <option value="كندي">كندي</option>
+                      <option value="أخرى">أخرى (تحديد)...</option>
+                    </select>
                   </div>
                   <div class="form-group">
                     <label for="new-customer-phone">رقم الجوال</label>
@@ -1469,55 +1497,6 @@
     </main>
   </div> <!-- End .dashboard-layout -->
 
-  <!-- ==================================================================
-       SHARED COMMON DATALISTS (Nationalities & Relationships)
-       ================================================================== -->
-  <datalist id="common-nationalities">
-    <option value="سعودي"></option>
-    <option value="كويتي"></option>
-    <option value="إماراتي"></option>
-    <option value="بحريني"></option>
-    <option value="عماني"></option>
-    <option value="قطري"></option>
-    <option value="مصري"></option>
-    <option value="يمني"></option>
-    <option value="سوداني"></option>
-    <option value="سوري"></option>
-    <option value="أردني"></option>
-    <option value="لبناني"></option>
-    <option value="فلسطيني"></option>
-    <option value="عراقي"></option>
-    <option value="مغربي"></option>
-    <option value="جزائري"></option>
-    <option value="تونسي"></option>
-    <option value="هندي"></option>
-    <option value="باكستاني"></option>
-    <option value="بنجلاديشي"></option>
-    <option value="فلبيني"></option>
-    <option value="إندونيسي"></option>
-    <option value="تركي"></option>
-    <option value="بريطاني"></option>
-    <option value="أمريكي"></option>
-    <option value="كندي"></option>
-    <option value="أخرى"></option>
-  </datalist>
-
-  <datalist id="common-relationships">
-    <option value="زوجة"></option>
-    <option value="زوج"></option>
-    <option value="ابن"></option>
-    <option value="ابنة"></option>
-    <option value="والد"></option>
-    <option value="والدة"></option>
-    <option value="أخ"></option>
-    <option value="أخت"></option>
-    <option value="سائق"></option>
-    <option value="خادمة"></option>
-    <option value="مرافق شخصي"></option>
-    <option value="صديق"></option>
-    <option value="زميل عمل"></option>
-    <option value="أخرى"></option>
-  </datalist>
 
   <!-- ==================================================================
        NEW RESERVATION MODAL / SLIDE-OVER DRAWER
@@ -1592,30 +1571,58 @@
             <span>⚡ إدخال الجوال أو رقم الهوية / الجواز يسترجع سجل النزيل السابق تلقائياً</span>
           </div>
 
-          <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+          <div class="form-row">
             <div class="form-group guest-name-group" style="margin-bottom: 0;">
               <label for="guest-name">اسم النزيل الثلاثي <span class="field-required" aria-hidden="true">*</span></label>
               <input type="text" id="guest-name" required placeholder="مثال: محمد عبدالله العمري" class="form-control">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label for="guest-nationality">الجنسية</label>
-              <input type="text" id="guest-nationality" list="common-nationalities" class="form-control" value="سعودي" placeholder="الجنسية">
+              <select id="guest-nationality" class="form-control nationality-select">
+                <option value="سعودي" selected>سعودي</option>
+                <option value="إماراتي">إماراتي</option>
+                <option value="كويتي">كويتي</option>
+                <option value="بحريني">بحريني</option>
+                <option value="عماني">عماني</option>
+                <option value="قطري">قطري</option>
+                <option value="مصري">مصري</option>
+                <option value="يمني">يمني</option>
+                <option value="سوداني">سوداني</option>
+                <option value="سوري">سوري</option>
+                <option value="أردني">أردني</option>
+                <option value="لبناني">لبناني</option>
+                <option value="فلسطيني">فلسطيني</option>
+                <option value="عراقي">عراقي</option>
+                <option value="مغربي">مغربي</option>
+                <option value="جزائري">جزائري</option>
+                <option value="تونسي">تونسي</option>
+                <option value="هندي">هندي</option>
+                <option value="باكستاني">باكستاني</option>
+                <option value="بنجلاديشي">بنجلاديشي</option>
+                <option value="فلبيني">فلبيني</option>
+                <option value="إندونيسي">إندونيسي</option>
+                <option value="تركي">تركي</option>
+                <option value="بريطاني">بريطاني</option>
+                <option value="أمريكي">أمريكي</option>
+                <option value="كندي">كندي</option>
+                <option value="أخرى">أخرى (تحديد)...</option>
+              </select>
             </div>
           </div>
-          </section>
 
-          <!-- Section: Companions (المرافقون) -->
-          <section class="modal-section-card companions-card" id="reservation-companions-section" style="margin-top: 14px;">
-            <div class="modal-section-card__header" style="display: flex; justify-content: space-between; align-items: center;">
-              <span>👥 مرافقو الحجز (اختياري)</span>
-              <button type="button" id="btn-add-companion-row" class="btn btn-sm btn-secondary" style="font-size: 0.78rem; padding: 4px 10px; font-weight: 700;">
+          <!-- Section: Companions (المرافقون) embedded in Guest Card -->
+          <div id="reservation-companions-section" style="grid-column: 1 / -1; margin-top: 10px; padding: 10px 12px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.82rem; font-weight: 700; color: #334155;">👥 مرافقو الحجز (اختياري)</span>
+              <button type="button" id="btn-add-companion-row" class="btn btn-sm btn-secondary" style="font-size: 0.74rem; padding: 3px 10px; font-weight: 700;">
                 + إضافة مرافق
               </button>
             </div>
-            <div id="new-res-companions-list" style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+            <div id="new-res-companions-list" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
               <!-- Dynamic companion rows added here -->
             </div>
-            <p id="new-res-no-companions-hint" style="color: #94a3b8; font-size: 0.8rem; margin: 8px 0 0; text-align: center;">لا يوجد مرافقون مضافون حالياً. اضغط على "+ إضافة مرافق" لإضافة بيانات المرافقين.</p>
+            <p id="new-res-no-companions-hint" style="color: #94a3b8; font-size: 0.78rem; margin: 6px 0 0; text-align: center;">لا يوجد مرافقون مضافون حالياً. اضغط على "+ إضافة مرافق" لإضافة بيانات المرافقين.</p>
+          </div>
           </section>
 
           <!-- Section 2: Room & Stay Details -->
@@ -1977,7 +1984,35 @@
         </div>
         <div class="form-group" style="margin-bottom: 16px;">
           <label for="edit-inv-guest-nationality" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">الجنسية</label>
-          <input type="text" id="edit-inv-guest-nationality" list="common-nationalities" class="form-control" placeholder="الجنسية (مثال: سعودي)">
+          <select id="edit-inv-guest-nationality" class="form-control nationality-select">
+            <option value="سعودي" selected>سعودي</option>
+            <option value="إماراتي">إماراتي</option>
+            <option value="كويتي">كويتي</option>
+            <option value="بحريني">بحريني</option>
+            <option value="عماني">عماني</option>
+            <option value="قطري">قطري</option>
+            <option value="مصري">مصري</option>
+            <option value="يمني">يمني</option>
+            <option value="سوداني">سوداني</option>
+            <option value="سوري">سوري</option>
+            <option value="أردني">أردني</option>
+            <option value="لبناني">لبناني</option>
+            <option value="فلسطيني">فلسطيني</option>
+            <option value="عراقي">عراقي</option>
+            <option value="مغربي">مغربي</option>
+            <option value="جزائري">جزائري</option>
+            <option value="تونسي">تونسي</option>
+            <option value="هندي">هندي</option>
+            <option value="باكستاني">باكستاني</option>
+            <option value="بنجلاديشي">بنجلاديشي</option>
+            <option value="فلبيني">فلبيني</option>
+            <option value="إندونيسي">إندونيسي</option>
+            <option value="تركي">تركي</option>
+            <option value="بريطاني">بريطاني</option>
+            <option value="أمريكي">أمريكي</option>
+            <option value="كندي">كندي</option>
+            <option value="أخرى">أخرى (تحديد)...</option>
+          </select>
         </div>
 
         <!-- Financial Section -->
@@ -2047,7 +2082,35 @@
 
         <div class="form-group" style="margin-bottom: 14px;">
           <label for="edit-guest-nationality" style="display: block; font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: #334155;">الجنسية</label>
-          <input type="text" id="edit-guest-nationality" list="common-nationalities" class="form-control" placeholder="الجنسية (مثال: سعودي)" style="font-size: 0.9rem;">
+          <select id="edit-guest-nationality" class="form-control nationality-select" style="font-size: 0.9rem;">
+            <option value="سعودي" selected>سعودي</option>
+            <option value="إماراتي">إماراتي</option>
+            <option value="كويتي">كويتي</option>
+            <option value="بحريني">بحريني</option>
+            <option value="عماني">عماني</option>
+            <option value="قطري">قطري</option>
+            <option value="مصري">مصري</option>
+            <option value="يمني">يمني</option>
+            <option value="سوداني">سوداني</option>
+            <option value="سوري">سوري</option>
+            <option value="أردني">أردني</option>
+            <option value="لبناني">لبناني</option>
+            <option value="فلسطيني">فلسطيني</option>
+            <option value="عراقي">عراقي</option>
+            <option value="مغربي">مغربي</option>
+            <option value="جزائري">جزائري</option>
+            <option value="تونسي">تونسي</option>
+            <option value="هندي">هندي</option>
+            <option value="باكستاني">باكستاني</option>
+            <option value="بنجلاديشي">بنجلاديشي</option>
+            <option value="فلبيني">فلبيني</option>
+            <option value="إندونيسي">إندونيسي</option>
+            <option value="تركي">تركي</option>
+            <option value="بريطاني">بريطاني</option>
+            <option value="أمريكي">أمريكي</option>
+            <option value="كندي">كندي</option>
+            <option value="أخرى">أخرى (تحديد)...</option>
+          </select>
         </div>
 
         <div class="form-group" style="margin-bottom: 20px;">
@@ -2106,7 +2169,22 @@
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="comp-form-rel" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">صلة القرابة</label>
-                <input type="text" id="comp-form-rel" list="common-relationships" class="form-control" placeholder="زوجة، ابن، صديق...">
+                <select id="comp-form-rel" class="form-control relationship-select">
+                  <option value="زوجة" selected>زوجة</option>
+                  <option value="زوج">زوج</option>
+                  <option value="ابن">ابن</option>
+                  <option value="ابنة">ابنة</option>
+                  <option value="والد">والد</option>
+                  <option value="والدة">والدة</option>
+                  <option value="أخ">أخ</option>
+                  <option value="أخت">أخت</option>
+                  <option value="سائق">سائق</option>
+                  <option value="خادمة">خادمة</option>
+                  <option value="مرافق شخصي">مرافق شخصي</option>
+                  <option value="صديق">صديق</option>
+                  <option value="زميل عمل">زميل عمل</option>
+                  <option value="أخرى">أخرى (تحديد)...</option>
+                </select>
               </div>
             </div>
 
@@ -2117,7 +2195,35 @@
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="comp-form-nat" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">الجنسية</label>
-                <input type="text" id="comp-form-nat" list="common-nationalities" class="form-control" value="سعودي" placeholder="الجنسية">
+                <select id="comp-form-nat" class="form-control nationality-select">
+                  <option value="سعودي" selected>سعودي</option>
+                  <option value="إماراتي">إماراتي</option>
+                  <option value="كويتي">كويتي</option>
+                  <option value="بحريني">بحريني</option>
+                  <option value="عماني">عماني</option>
+                  <option value="قطري">قطري</option>
+                  <option value="مصري">مصري</option>
+                  <option value="يمني">يمني</option>
+                  <option value="سوداني">سوداني</option>
+                  <option value="سوري">سوري</option>
+                  <option value="أردني">أردني</option>
+                  <option value="لبناني">لبناني</option>
+                  <option value="فلسطيني">فلسطيني</option>
+                  <option value="عراقي">عراقي</option>
+                  <option value="مغربي">مغربي</option>
+                  <option value="جزائري">جزائري</option>
+                  <option value="تونسي">تونسي</option>
+                  <option value="هندي">هندي</option>
+                  <option value="باكستاني">باكستاني</option>
+                  <option value="بنجلاديشي">بنجلاديشي</option>
+                  <option value="فلبيني">فلبيني</option>
+                  <option value="إندونيسي">إندونيسي</option>
+                  <option value="تركي">تركي</option>
+                  <option value="بريطاني">بريطاني</option>
+                  <option value="أمريكي">أمريكي</option>
+                  <option value="كندي">كندي</option>
+                  <option value="أخرى">أخرى (تحديد)...</option>
+                </select>
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="comp-form-phone" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">رقم الجوال</label>

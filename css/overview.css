@@ -1367,9 +1367,13 @@
 
 #autofill-guest-status { grid-area: autofill; }
 #banned-guest-warning { grid-area: banned; }
+#reservation-form > section.guest-info-card,
 #reservation-form > section:nth-of-type(1) { grid-area: guest; }
+#reservation-form > section.stay-details-card,
 #reservation-form > section:nth-of-type(2) { grid-area: stay; }
+#reservation-form > section.pricing-card,
 #reservation-form > section:nth-of-type(3) { grid-area: pricing; }
+#reservation-form > section.payment-card,
 #reservation-form > section:nth-of-type(4) { grid-area: payment; }
 #reservation-form > .modal-layout__footer { grid-area: footer; }
 
@@ -1428,7 +1432,7 @@
   grid-column: 1 / -1;
 }
 
-#new-reservation-modal #reservation-form > section:nth-of-type(1) > div:not(.modal-section-card__header):not(.form-row):not(.form-group) {
+#new-reservation-modal #reservation-form > section:nth-of-type(1) > div:not(.modal-section-card__header):not(.form-row):not(.form-group):not(#reservation-companions-section) {
   grid-column: 1 / -1;
   overflow: hidden;
   margin: 0 !important;
@@ -1436,6 +1440,12 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#new-reservation-modal #reservation-form #reservation-companions-section {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 /* Stay card: booking type and room share the first row; dates share the next. */

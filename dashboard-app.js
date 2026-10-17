@@ -456,8 +456,113 @@ window.DashboardApp = {
     document.title = `لوحة التحكم | ${brand.nameAr} - ${brand.nameEn || ''}`;
   }
 
+  const COMMON_NATIONALITIES = [
+    'سعودي', 'إماراتي', 'كويتي', 'بحريني', 'عماني', 'قطري',
+    'مصري', 'يمني', 'سوداني', 'سوري', 'أردني', 'لبناني',
+    'فلسطيني', 'عراقي', 'مغربي', 'جزائري', 'تونسي',
+    'هندي', 'باكستاني', 'بنجلاديشي', 'فلبيني', 'إندونيسي',
+    'تركي', 'بريطاني', 'أمريكي', 'كندي', 'أوروبي'
+  ];
+
+  function setSelectNationality(selectEl, value) {
+    if (!selectEl) return;
+    const targetVal = (value || 'سعودي').trim();
+    let found = false;
+    for (let i = 0; i < selectEl.options.length; i++) {
+      if (selectEl.options[i].value === targetVal) {
+        selectEl.selectedIndex = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found && targetVal) {
+      const opt = document.createElement('option');
+      opt.value = targetVal;
+      opt.textContent = targetVal;
+      if (selectEl.lastElementChild) {
+        selectEl.insertBefore(opt, selectEl.lastElementChild);
+      } else {
+        selectEl.appendChild(opt);
+      }
+      selectEl.value = targetVal;
+    }
+  }
+
+  // Delegated handler for custom ("أخرى") nationality or relationship choice
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('change', (e) => {
+      if (!e.target || !e.target.classList) return;
+      if (e.target.classList.contains('nationality-select') && e.target.value === 'أخرى') {
+        const custom = (typeof window !== 'undefined' && window.prompt) ? window.prompt('يرجى إدخال اسم الجنسية:') : null;
+        if (custom && custom.trim()) {
+          const val = custom.trim();
+          let opt = Array.from(e.target.options).find(o => o.value === val);
+          if (!opt) {
+            opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val;
+            e.target.insertBefore(opt, e.target.lastElementChild);
+          }
+          e.target.value = val;
+        } else {
+          e.target.value = 'سعودي';
+        }
+      } else if (e.target.classList.contains('relationship-select') && e.target.value === 'أخرى') {
+        const custom = (typeof window !== 'undefined' && window.prompt) ? window.prompt('يرجى تحديد صلة القرابة:') : null;
+        if (custom && custom.trim()) {
+          const val = custom.trim();
+          let opt = Array.from(e.target.options).find(o => o.value === val);
+          if (!opt) {
+            opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val;
+            e.target.insertBefore(opt, e.target.lastElementChild);
+          }
+          e.target.value = val;
+        } else {
+          e.target.value = 'مرافق';
+        }
+      }
+    });
+  }
+
+  const COMMON_RELATIONSHIPS = [
+    'زوجة', 'زوج', 'ابن', 'ابنة', 'والد', 'والدة', 'أخ', 'أخت',
+    'سائق', 'خادمة', 'مرافق شخصي', 'صديق', 'زميل عمل'
+  ];
+
+  function setSelectRelationship(selectEl, value) {
+    if (!selectEl) return;
+    const targetVal = (value || 'زوجة').trim();
+    let found = false;
+    for (let i = 0; i < selectEl.options.length; i++) {
+      if (selectEl.options[i].value === targetVal) {
+        selectEl.selectedIndex = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found && targetVal) {
+      const opt = document.createElement('option');
+      opt.value = targetVal;
+      opt.textContent = targetVal;
+      if (selectEl.lastElementChild) {
+        selectEl.insertBefore(opt, selectEl.lastElementChild);
+      } else {
+        selectEl.appendChild(opt);
+      }
+      selectEl.value = targetVal;
+    }
+  }
+
+  App.Helpers.COMMON_NATIONALITIES = COMMON_NATIONALITIES;
+  App.Helpers.COMMON_RELATIONSHIPS = COMMON_RELATIONSHIPS;
+  App.Helpers.setSelectNationality = setSelectNationality;
+  App.Helpers.setSelectRelationship = setSelectRelationship;
   App.Helpers.getActiveBrand = getActiveBrand;
   App.Helpers.applyBranding = applyBranding;
   App.Helpers.escapeHtml = escapeHtml;
+  window.setSelectNationality = setSelectNationality;
+  window.setSelectRelationship = setSelectRelationship;
 
 })(window.DashboardApp);

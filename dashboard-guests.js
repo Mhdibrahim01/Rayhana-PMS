@@ -141,7 +141,13 @@
 
     if (App.DOM.editGuestId) App.DOM.editGuestId.value = guest.id;
     if (App.DOM.editGuestName) App.DOM.editGuestName.value = guest.name || '';
-    if (App.DOM.editGuestNationality) App.DOM.editGuestNationality.value = guest.nationality || 'سعودي';
+    if (App.DOM.editGuestNationality) {
+      if (App.Helpers.setSelectNationality) {
+        App.Helpers.setSelectNationality(App.DOM.editGuestNationality, guest.nationality || 'سعودي');
+      } else {
+        App.DOM.editGuestNationality.value = guest.nationality || 'سعودي';
+      }
+    }
     if (App.DOM.editGuestPhone) App.DOM.editGuestPhone.value = guest.phone || '';
     if (App.DOM.editGuestIdNumber) App.DOM.editGuestIdNumber.value = guest.id_number || '';
 
