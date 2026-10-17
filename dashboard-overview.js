@@ -1165,7 +1165,44 @@
       <div class="reservation-preview-body modal-layout__body room-details-body">
         <section class="reservation-preview-section modal-section-card room-details-card room-details-guest-card">
           <div class="reservation-preview-section-title modal-section-card__header room-details-card-heading"><span class="reservation-preview-title-icon">\u2659</span><strong>\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0646\u0632\u064a\u0644</strong></div>
-          <div class="room-details-guest-fields">${roomDetailsField('\u0627\u0633\u0645 \u0627\u0644\u0646\u0632\u064a\u0644', r.guest_name, '', 'room-details-name')}${roomDetailsField('\u0631\u0642\u0645 \u0627\u0644\u062c\u0648\u0627\u0644', r.guest_phone)}${roomDetailsField('\u0631\u0642\u0645 \u0627\u0644\u0647\u0648\u064a\u0629 / \u0627\u0644\u0625\u0642\u0627\u0645\u0629', r.guest_id_number)}</div>
+          <div class="room-details-guest-fields">${roomDetailsField('\u0627\u0633\u0645 \u0627\u0644\u0646\u0632\u064a\u0644', r.guest_name, '', 'room-details-name')}${roomDetailsField('\u0631\u0642\u0645 \u0627\u0644\u062c\u0648\u0627\u0644', r.guest_phone)}${roomDetailsField('\u0631\u0642\u0645 \u0627\u0644\u0647\u0648\u064a\u0629 / \u0627\u0644\u0625\u0642\u0627\u0645\u0629', r.guest_id_number)}${roomDetailsField('\u0627\u0644\u062c\u0646\u0633\u064a\u0629', r.guest_nationality || '\u0633\u0639\u0648\u062f\u064a')}</div>
+          <div class="room-details-companions-section" style="margin-top: 10px; border-top: 1px dashed #cbd5e1; padding-top: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
+              <span style="font-size: 0.82rem; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 5px;">
+                <span>👥</span>
+                <span>\u0645\u0631\u0627\u0641\u0642\u0648 \u0627\u0644\u062d\u062c\u0632</span>
+                ${(r.companions && r.companions.length > 0) ? `<span style="background: #e0f2fe; color: #0369a1; font-size: 0.72rem; padding: 1px 7px; border-radius: 999px; font-weight: 700;">${r.companions.length}</span>` : ''}
+              </span>
+              <button type="button" class="btn btn-sm" data-action="manage-companions" data-id="${App.Helpers.escapeHtml(r.id)}" style="font-size: 0.72rem; padding: 3px 9px; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" title="\u0625\u062f\u0627\u0631\u0629 \u0645\u0631\u0627\u0641\u0642\u064a\u0646 \u0627\u0644\u062d\u062c\u0632">
+                <span>${(r.companions && r.companions.length > 0) ? '\u270f\ufe0f \u0625\u062f\u0627\u0631\u0629' : '+ \u0625\u0636\u0627\u0641\u0629 \u0645\u0631\u0627\u0641\u0642'}</span>
+              </button>
+            </div>
+            ${(r.companions && r.companions.length > 0) ? `
+              <div class="room-details-companions-list" style="display: flex; flex-direction: column; gap: 5px; max-height: 135px; overflow-y: auto; padding-left: 2px;">
+                ${r.companions.map(c => `
+                  <div class="room-details-companion-item" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 9px; font-size: 0.78rem; display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+                    <div style="min-width: 0; flex: 1;">
+                      <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <strong style="color: #1e293b; font-size: 0.82rem;">${App.Helpers.escapeHtml(westernPreviewDigits(c.name))}</strong>
+                        ${c.relationship ? `<span style="color: #475569; background: #e2e8f0; font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; font-weight: 600;">${App.Helpers.escapeHtml(westernPreviewDigits(c.relationship))}</span>` : ''}
+                        <span style="color: #0369a1; background: #e0f2fe; font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; font-weight: 600;">${App.Helpers.escapeHtml(westernPreviewDigits(c.nationality || '\u0633\u0639\u0648\u062f\u064a'))}</span>
+                      </div>
+                      ${(c.id_number || c.phone) ? `
+                        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap;">
+                          ${c.id_number ? `<span>\u0647\u0648\u064a\u0629: <strong style="color: #475569;">${App.Helpers.escapeHtml(westernPreviewDigits(c.id_number))}</strong></span>` : ''}
+                          ${c.phone ? `<span>\u062c\u0648\u0627\u0644: <strong dir="ltr" style="color: #475569;"><bdi>${App.Helpers.escapeHtml(westernPreviewDigits(c.phone))}</bdi></strong></span>` : ''}
+                        </div>
+                      ` : ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : `
+              <div style="font-size: 0.76rem; color: #94a3b8; text-align: center; padding: 8px 6px; background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 8px;">
+                \u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0631\u0627\u0641\u0642\u0648\u0646 \u0645\u0633\u062c\u0644\u0648\u0646 \u0644\u0647\u0630\u0627 \u0627\u0644\u062d\u062c\u0632
+              </div>
+            `}
+          </div>
           <div class="reservation-preview-contact-actions room-details-contact-actions">${r.guest_phone ? `<a class="reservation-preview-contact" href="tel:${App.Helpers.escapeHtml(westernPreviewDigits(r.guest_phone))}">\u0627\u062a\u0635\u0627\u0644 <span>\u260e</span></a>` : ''}<button type="button" class="reservation-preview-contact reservation-preview-whatsapp" data-action="whatsapp" data-id="${App.Helpers.escapeHtml(r.id)}" title="\u0645\u0631\u0627\u0633\u0644\u0629 \u0627\u0644\u0646\u0632\u064a\u0644 \u0639\u0628\u0631 \u0648\u0627\u062a\u0633\u0627\u0628" aria-label="\u0645\u0631\u0627\u0633\u0644\u0629 \u0627\u0644\u0646\u0632\u064a\u0644 \u0639\u0628\u0631 \u0648\u0627\u062a\u0633\u0627\u0628">\u0645\u0631\u0627\u0633\u0644\u0629 \u0648\u0627\u062a\u0633\u0627\u0628 <span>\u230f</span></button></div>
         </section>
         <section class="reservation-preview-section modal-section-card room-details-card room-details-stay-card">

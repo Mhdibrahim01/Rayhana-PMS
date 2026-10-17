@@ -4708,7 +4708,16 @@
     if (compFormResId) compFormResId.value = targetId;
     resetCompanionForm();
 
-    const r = findLoadedReservation(targetId);
+    let r = findLoadedReservation(targetId);
+    if (!r && window.DashboardApp?.State?.roomsCache) {
+      for (const room of window.DashboardApp.State.roomsCache) {
+        const found = room.active_reservations?.find(res => Number(res.id) === targetId);
+        if (found) {
+          r = { room_number: room.room_number, guest_name: found.guest_name };
+          break;
+        }
+      }
+    }
     if (companionsModalSubtitle) {
       if (r) {
         companionsModalSubtitle.textContent = `الغرفة ${r.room_number || '-'} • النزيل: ${r.guest_name || '-'}`;
@@ -4725,11 +4734,16 @@
   }
 
   function closeCompanionsModal() {
+    const closedResId = currentManagingReservationId;
     if (reservationCompanionsModal) {
       reservationCompanionsModal.style.display = 'none';
     }
     resetCompanionForm();
     currentManagingReservationId = null;
+    const previewModal = document.getElementById('reservation-preview-modal');
+    if (previewModal && previewModal.style.display === 'flex' && closedResId && window.DashboardApp?.Helpers?.openReservationPreview) {
+      window.DashboardApp.Helpers.openReservationPreview(closedResId);
+    }
   }
 
   function resetCompanionForm() {
@@ -4834,6 +4848,10 @@
                 if (compFormId && compFormId.value === String(compId)) resetCompanionForm();
                 await loadReservationCompanionsList(currentManagingReservationId);
                 loadReservationsData();
+                const previewModal = document.getElementById('reservation-preview-modal');
+                if (previewModal && previewModal.style.display === 'flex' && currentManagingReservationId && window.DashboardApp?.Helpers?.openReservationPreview) {
+                  window.DashboardApp.Helpers.openReservationPreview(currentManagingReservationId);
+                }
               } else {
                 showToast(delRes?.error || 'فشل حذف المرافق.', 'error');
               }
@@ -4887,6 +4905,10 @@
           resetCompanionForm();
           await loadReservationCompanionsList(resId);
           loadReservationsData();
+          const previewModal = document.getElementById('reservation-preview-modal');
+          if (previewModal && previewModal.style.display === 'flex' && resId && window.DashboardApp?.Helpers?.openReservationPreview) {
+            window.DashboardApp.Helpers.openReservationPreview(resId);
+          }
         } else {
           showToast(res?.error || 'فشل حفظ بيانات المرافق.', 'error');
         }

@@ -1174,6 +1174,11 @@
 #reservation-preview-modal .room-details-refined .room-details-name { min-height:58px; }
 #reservation-preview-modal .room-details-refined .room-details-name strong { font-size:15px; }
 #reservation-preview-modal .room-details-refined .room-details-contact-actions { display:flex; flex-wrap:wrap; gap:7px; margin: auto 0 0; }
+#reservation-preview-modal .room-details-refined .room-details-guest-card { overflow-y: auto; }
+#reservation-preview-modal .room-details-refined .room-details-companions-list { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+#reservation-preview-modal .room-details-refined .room-details-companions-list::-webkit-scrollbar { width: 4px; }
+#reservation-preview-modal .room-details-refined .room-details-companions-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+#reservation-companions-modal { z-index: 100150 !important; }
 #reservation-preview-modal .room-details-refined .reservation-preview-contact { min-height:36px; justify-content:center; padding:6px 10px; font-size:12px; white-space:normal; overflow-wrap:anywhere; }
 #reservation-preview-modal .room-details-refined .room-details-stay-fields { display:grid; min-width:0; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
 #reservation-preview-modal .room-details-refined .room-details-receipt-number strong { font-family:inherit; font-size:14px; letter-spacing:normal; }
