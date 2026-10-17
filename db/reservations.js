@@ -745,16 +745,24 @@ function createReservation({
     let receiptNumber = null;
     if (paid > 0) {
       receiptNumber = generateReceiptNumber(newReservationId);
+      const isMonthlyBooking = normBookingType === 'حجز شهري';
+      const cleanCheckOut = (computedCheckOutDate && computedCheckOutDate.trim()) ? computedCheckOutDate.trim() : null;
+      const initialNotes = isMonthlyBooking && cleanCheckOut
+        ? `إقامة شهرية (${checkInDate} إلى ${cleanCheckOut})`
+        : 'دفعة الحجز المبدئية عند تسجيل الوصول';
       const payStmt = db.prepare(`
-        INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes)
-        VALUES (?, ?, ?, ?, 'advance_payment', datetime('now', 'localtime'), ?, 'دفعة الحجز المبدئية عند تسجيل الوصول')
+        INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes, period_start_date, period_end_date)
+        VALUES (?, ?, ?, ?, 'advance_payment', datetime('now', 'localtime'), ?, ?, ?, ?)
       `);
       payStmt.run([
         receiptNumber,
         newReservationId,
         paid,
         method,
-        userId ? parseInt(userId, 10) : null
+        userId ? parseInt(userId, 10) : null,
+        initialNotes,
+        isMonthlyBooking ? checkInDate : null,
+        isMonthlyBooking ? cleanCheckOut : null
       ]);
       payStmt.free();
     }
@@ -1842,9 +1850,12 @@ function extendReservation({
     if (payAmount > 0) {
       newPaid = roundMoney(currentPaid + payAmount);
       receiptNumber = generateReceiptNumber(targetId);
+      const defaultNotes = isMonthly
+        ? `إقامة شهرية (${oldCheckOut} إلى ${cleanNewCheckOut})`
+        : 'سداد دفعة إقامة';
       const payStmt = db.prepare(`
-        INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes)
-        VALUES (?, ?, ?, ?, 'extension_payment', datetime('now', 'localtime'), ?, ?)
+        INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes, period_start_date, period_end_date)
+        VALUES (?, ?, ?, ?, 'extension_payment', datetime('now', 'localtime'), ?, ?, ?, ?)
       `);
       payStmt.run([
         receiptNumber,
@@ -1852,7 +1863,9 @@ function extendReservation({
         payAmount,
         paymentMethod || 'نقداً',
         userId ? parseInt(userId, 10) : null,
-        notes || 'سداد دفعة تمديد إقامة'
+        notes || defaultNotes,
+        oldCheckOut,
+        cleanNewCheckOut
       ]);
       payStmt.free();
     }
@@ -1907,7 +1920,11 @@ function extendReservation({
       discountAmount: normDiscountAmount,
       additionalCost: calcAdditionalCost,
       paidAmount: payAmount,
-      receiptNumber
+      receiptNumber,
+      isMonthly,
+      periodStartDate: oldCheckOut,
+      periodEndDate: cleanNewCheckOut,
+      cycleCost: calcAdditionalCost
     };
   } catch (err) {
     try { db.run("ROLLBACK;"); } catch (rbErr) {}
@@ -2323,6 +2340,8 @@ function getReservationPayments(reservationId) {
       p.created_at,
       p.business_date,
       p.notes,
+      p.period_start_date,
+      p.period_end_date,
       p.user_id,
       u.username AS staff_username
     FROM payments p
@@ -2363,16 +2382,22 @@ function getPaymentReceipt(receiptIdentifier) {
       p.created_at,
       p.business_date,
       p.notes,
+      p.period_start_date,
+      p.period_end_date,
       r.total_price,
       r.paid_amount,
       r.payment_status,
       r.check_in_date,
       r.check_out_date,
+      r.booking_type,
+      r.monthly_rate_snapshot,
       g.name AS guest_name,
       g.phone AS guest_phone,
       g.id_number AS guest_id_number,
       rm.room_number,
       rm.type AS room_type,
+      rm.monthly_price,
+      rm.price_per_night,
       u.username AS staff_username
     FROM payments p
     JOIN reservations r ON p.reservation_id = r.id

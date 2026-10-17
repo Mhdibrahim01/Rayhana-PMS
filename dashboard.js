@@ -615,7 +615,7 @@
 
   window.addEventListener('resize', fitInvoicePreviewToViewport);
 
-  async function openInvoiceModal(reservationId) {
+  async function openInvoiceModal(reservationId, options = {}) {
     const targetId = parseInt(reservationId, 10);
     if (!targetId || isNaN(targetId)) {
       showToast('يرجى تحديد حجز صالح لعرض الفاتورة.', 'error');
@@ -690,9 +690,11 @@
       // Compute total collected and total refunded from the payments ledger.
       let originalCollected = 0;
       let refundedTotal = 0;
+      let reservationPaymentsList = [];
       try {
         const paymentsRes = await window.api.getReservationPayments(targetId);
         if (paymentsRes && paymentsRes.success && Array.isArray(paymentsRes.data)) {
+          reservationPaymentsList = paymentsRes.data;
           for (const p of paymentsRes.data) {
             const amt = parseFloat(p.amount) || 0;
             if (amt > 0) {
@@ -1030,95 +1032,241 @@
         signature: 'assets/signature.svg'
       };
 
-      invoicePrintableArea.innerHTML = `
-        ${receiptDocumentStyles}
-        ${receiptPrintFitScript}
-        <div class="receipt-document" dir="rtl">
-          <!-- Title Section for Monthly -->
-       ${isMonthly ? `
-  <div style="text-align: center; margin-bottom: 32px; margin-top: 10px; display: flex; flex-direction: column; align-items: center;">
-    <h1 style="font-family: 'Cairo', 'Tajawal', sans-serif; font-size: 1.8rem; font-weight: 700; color: #1e293b; margin: 0 0 10px 0; letter-spacing: normal; font-synthesis: none; text-rendering: optimizeLegibility;">عقد إيجار</h1>
-    <div style="height: 3px; width: 110px; background-color: #94a3b8; border-radius: 2px;"></div>
-  </div>
-` : ''}
-          <!-- Top Section: Company & Receipt Info -->
-          <div class="receipt-header" style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 24px; margin-bottom: 28px;">
-            <!-- Company Info (Right) -->
-            <div style="display: flex; gap: 16px; align-items: flex-start;">
-              ${activeBrand.logo ? `<img src="${activeBrand.logo}" alt="شعار الفندق" style="width: 52px; height: 52px; border-radius: 8px; object-fit: contain; border: 1px solid #e2e8f0; background: #fff; padding: 2px;">` : ''}
-              <div>
-                <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? (activeBrand.companyAr || 'مؤسسة مكتب شمس المنازل للخدمات العقارية') : (activeBrand.nameAr || 'ريحانة للوحدات السكنية')}</h2>
-                <div style="font-size: 0.85rem; color: #64748b; line-height: 1.6;">
-                  <div>العنوان: ${escapeHtml(activeBrand.address || 'الخبر - الثقبة')} </div>
-                  <div>الرمز البريدي: ${escapeHtml(activeBrand.postalCode || '34625')}</div>
-                  <div>هاتف الاستقبال: ${escapeHtml(activeBrand.phone || '0560631783')}</div>
-                  ${isMonthly ? (activeBrand.crNumber && activeBrand.crNumber !== '7038955915' ? `<div>الرقم الموحد: ${escapeHtml(activeBrand.crNumber)}</div>` : '<div>الرقم الموحد: 7038955915</div>') : ''}
+      // Monthly booking cycle management
+      const monthlyCycles = [];
+      if (isMonthly) {
+        const positivePayments = reservationPaymentsList.filter(p => parseFloat(p.amount) > 0);
+        if (positivePayments.length > 0) {
+          let runningStart = inv.check_in_date ? String(inv.check_in_date).slice(0, 10) : '';
+          positivePayments.forEach((p, idx) => {
+            const pStart = (p.period_start_date ? String(p.period_start_date).slice(0, 10) : '') || runningStart;
+            let pEnd = p.period_end_date ? String(p.period_end_date).slice(0, 10) : '';
+            if (!pEnd) {
+              const nextP = positivePayments[idx + 1];
+              if (nextP && nextP.period_start_date) {
+                pEnd = String(nextP.period_start_date).slice(0, 10);
+              } else if (idx === positivePayments.length - 1 && inv.check_out_date) {
+                pEnd = String(inv.check_out_date).slice(0, 10);
+              } else if (pStart) {
+                const dt = new Date(`${pStart}T00:00:00Z`);
+                dt.setUTCDate(dt.getUTCDate() + 30);
+                pEnd = dt.toISOString().slice(0, 10);
+              }
+            }
+            if (pEnd) runningStart = pEnd;
+            const cycleNames = ['الشهر الأول', 'الشهر الثاني', 'الشهر الثالث', 'الشهر الرابع', 'الشهر الخامس', 'الشهر السادس'];
+            const cycleTitle = cycleNames[idx] || `الشهر ${idx + 1}`;
+            monthlyCycles.push({
+              index: idx,
+              title: cycleTitle,
+              receiptNumber: p.receipt_number,
+              paymentDate: p.payment_date,
+              startDate: pStart,
+              endDate: pEnd,
+              amount: parseFloat(p.amount) || 0,
+              rate: monthlyRate,
+              paymentMethod: p.payment_method || inv.payment_method || '',
+              user: p.username || ''
+            });
+          });
+        } else {
+          monthlyCycles.push({
+            index: 0,
+            title: 'الشهر الأول',
+            receiptNumber: null,
+            paymentDate: inv.created_at,
+            startDate: inv.check_in_date ? String(inv.check_in_date).slice(0, 10) : '',
+            endDate: inv.check_out_date ? String(inv.check_out_date).slice(0, 10) : '',
+            amount: 0,
+            rate: monthlyRate,
+            paymentMethod: inv.payment_method || '',
+            user: ''
+          });
+        }
+      }
+
+      let selectedCycleIndex = -1;
+      if (isMonthly) {
+        if (options && options.receiptNumber) {
+          const matchIdx = monthlyCycles.findIndex(c => c.receiptNumber === options.receiptNumber);
+          if (matchIdx !== -1) selectedCycleIndex = matchIdx;
+        }
+        if (selectedCycleIndex === -1 && (!options || !options.showCumulative)) {
+          selectedCycleIndex = monthlyCycles.length > 0 ? (monthlyCycles.length - 1) : 0;
+        }
+      }
+
+      const invoiceTabsBar = document.getElementById('invoice-receipt-tabs-bar');
+      const invoiceTabsContainer = document.getElementById('invoice-receipt-tabs-container');
+      const invoiceTabIndicator = document.getElementById('invoice-active-tab-indicator');
+
+      const invoiceRenderer = {
+        ['render']: (mode) => {
+          if (typeof mode === 'number') {
+            selectedCycleIndex = mode;
+          } else if (mode === 'cumulative') {
+            selectedCycleIndex = -1;
+          }
+
+          if (invoiceTabsBar && invoiceTabsContainer) {
+            if (isMonthly && monthlyCycles.length > 1) {
+              invoiceTabsBar.style.display = 'flex';
+              invoiceTabsContainer.innerHTML = '';
+
+              monthlyCycles.forEach((c, idx) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm';
+                btn.textContent = `سند ${c.title}`;
+                const isSelected = (selectedCycleIndex === idx);
+                btn.style.cssText = isSelected
+                  ? 'background: #4338ca; color: white; font-weight: 800; border: 1px solid #4338ca; border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; cursor: pointer;'
+                  : 'background: white; color: #475569; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; cursor: pointer;';
+                btn.addEventListener('click', () => {
+                  invoiceRenderer['render'](idx);
+                });
+                invoiceTabsContainer.appendChild(btn);
+              });
+
+              const cumBtn = document.createElement('button');
+              cumBtn.type = 'button';
+              cumBtn.className = 'btn btn-sm';
+              cumBtn.textContent = 'كشف الحساب الشامل';
+              const isCumSelected = (selectedCycleIndex === -1);
+              cumBtn.style.cssText = isCumSelected
+                ? 'background: #4338ca; color: white; font-weight: 800; border: 1px solid #4338ca; border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; cursor: pointer;'
+                : 'background: white; color: #475569; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; cursor: pointer;';
+              cumBtn.addEventListener('click', () => {
+                invoiceRenderer['render']('cumulative');
+              });
+              invoiceTabsContainer.appendChild(cumBtn);
+
+              if (invoiceTabIndicator) {
+                if (selectedCycleIndex === -1) {
+                  invoiceTabIndicator.textContent = `معاينة: كشف الحساب الشامل لجميع فترات الإقامة (${monthlyCycles.length} أشهر)`;
+                } else {
+                  const activeC = monthlyCycles[selectedCycleIndex];
+                  invoiceTabIndicator.textContent = `معاينة: سند ${activeC.title} (${activeC.startDate} إلى ${activeC.endDate}) - رقم السند: ${activeC.receiptNumber || invoiceNum}`;
+                }
+              }
+            } else {
+              invoiceTabsBar.style.display = 'none';
+            }
+          }
+
+          const isSingleCycleView = isMonthly && selectedCycleIndex >= 0 && selectedCycleIndex < monthlyCycles.length;
+          const currentCycle = isSingleCycleView ? monthlyCycles[selectedCycleIndex] : null;
+
+          let displayReceiptNum = invoiceNum;
+          let displayPrintDate = printDate;
+          let displayPrintTime = printTime;
+          let displayPaymentBadgeHtml = window.DashboardApp.Helpers.getPaymentStatusBadge(invoicePaymentStatusBadge);
+          let displayCheckIn = isEarlyMorningCheckin ? `${actualArrivalCalendarDate}${actualArrivalTimeStr ? ` (${actualArrivalTimeStr})` : ''}` : checkInReceiptDate;
+          let displayCheckOut = isEarlyMorningCheckin || inv.status === 'مكتمل' ? `${actualDepartureCalendarDate}${actualDepartureTimeStr ? ` (${actualDepartureTimeStr})` : ''}` : checkOutReceiptDate;
+          let displayDuration = invoiceDisplayDuration;
+          let displayPaymentMethod = escapeHtml(receiptDigits(inv.payment_method || 'نقداً'));
+
+          if (isSingleCycleView && currentCycle) {
+            displayReceiptNum = currentCycle.receiptNumber || invoiceNum;
+            if (currentCycle.paymentDate) {
+              const dtFormatted = formatReceiptDateTime(currentCycle.paymentDate);
+              if (dtFormatted && dtFormatted !== '-') {
+                displayPrintDate = dtFormatted.slice(0, 10);
+                displayPrintTime = dtFormatted.length > 11 ? dtFormatted.slice(11) : printTime;
+              }
+            }
+            const cyclePaid = currentCycle.amount;
+            const cycleRate = currentCycle.rate;
+            const cycleRemaining = Math.max(0, roundMoney(cycleRate - cyclePaid));
+            const cycleStatusBadge = cycleRemaining <= 0.005 ? '\u0645\u062f\u0641\u0648\u0639\u0020\u0628\u0627\u0644\u0643\u0627\u0645\u0644' : (cyclePaid > 0 ? '\u0645\u062f\u0641\u0648\u0639\u0020\u062c\u0632\u0626\u064a\u0627\u064b' : '\u063a\u064a\u0631\u0020\u0645\u062f\u0641\u0648\u0639');
+            displayPaymentBadgeHtml = window.DashboardApp.Helpers.getPaymentStatusBadge(cycleStatusBadge);
+            displayCheckIn = formatReceiptDate(currentCycle.startDate);
+            displayCheckOut = formatReceiptDate(currentCycle.endDate);
+            displayDuration = 'شهر';
+            displayPaymentMethod = escapeHtml(receiptDigits(currentCycle.paymentMethod || inv.payment_method || '\u0646\u0642\u062f\u0627\u064b'));
+          }
+
+          let itemsTableRowsHtml = '';
+          let totalsCardHtml = '';
+
+          if (isSingleCycleView && currentCycle) {
+            const cycleRate = currentCycle.rate;
+            const cyclePaid = currentCycle.amount;
+            const cycleRemaining = Math.max(0, roundMoney(cycleRate - cyclePaid));
+
+            itemsTableRowsHtml = `
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 14px;">
+                  <div style="font-weight: 700; color: #1e293b;">إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))}</div>
+                  <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">
+                    نوع الوحدة: ${escapeHtml(receiptDigits(inv.room_type || 'عادية'))} | الفترة: <bdi dir="ltr">${displayCheckIn}</bdi> إلى <bdi dir="ltr">${displayCheckOut}</bdi>
+                  </div>
+                </td>
+                <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cycleRate)} ر.س</td>
+                <td style="padding: 14px; text-align: center; font-weight: 700; color: #475569;">شهر</td>
+                <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cycleRate)} ر.س</td>
+              </tr>
+              ${deposit > 0 ? `
+                <tr style="background: #fdf4ff; border-bottom: 1px solid #fae8ff;">
+                  <td style="padding: 12px 14px;">
+                    <div style="font-weight: 700; color: #701a75;">رصيد التأمين المسجل (Deposit Balance)</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">${legacyDeposit ? 'قيمة تاريخية بلا سند حركة، وتحتاج مراجعة قبل ردها' : 'مبلغ محفوظ للتأمين ويتطلب تسوية عند المغادرة'}</div>
+                  </td>
+                  <td style="padding: 12px 14px; text-align: center;">-</td>
+                  <td style="padding: 12px 14px; text-align: center;">-</td>
+                  <td style="padding: 12px 14px; text-align: left; font-weight: 700; color: #701a75;">${formatReceiptMoney(deposit)} ر.س</td>
+                </tr>
+              ` : ''}
+            `;
+
+            totalsCardHtml = `
+              <div class="receipt-totals-card">
+                <div class="receipt-total-line receipt-total-net">
+                  <span>الإجمالي الصافي:</span>
+                  <span dir="ltr">${formatReceiptMoney(cycleRate)} ر.س</span>
+                </div>
+                <div class="receipt-total-line receipt-total-paid">
+                  <span>المبلغ المدفوع:</span>
+                  <span dir="ltr">${formatReceiptMoney(cyclePaid)} ر.س</span>
+                </div>
+                <div class="receipt-total-line receipt-total-remaining" style="color: ${cycleRemaining > 0 ? '#dc2626' : '#05963d'};">
+                  <span>المبلغ المتبقي:</span>
+                  <span dir="ltr">${formatReceiptMoney(cycleRemaining)} ر.س</span>
                 </div>
               </div>
-            </div>
+            `;
+          } else {
+            // Cumulative or Standard View
+            const extraDaysFee = isMonthly ? Math.max(0, roundMoney(monthlyExtensionAmount - (Math.max(0, monthlyCycles.length - 1) * monthlyRate))) : 0;
 
-            <!-- Receipt Info (Left) -->
-            <div style="background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 14px 18px; text-align: right; min-width: 220px;">
-              <div style="display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 800; margin-bottom: 10px;">
-                ${isCancelled ? 'سند حجز ملغي' : 'سند'}
-              </div>
-              <div style="font-size: 0.85rem; color: #475569; line-height: 1.7;">
-                <div><span style="font-weight: 700; color: #1e293b;">رقم السند:</span> <span style="font-family: monospace; color: #4338ca; font-weight: 700;">${invoiceNum}</span></div>
-                <div>تاريخ الإصدار: <bdi dir="ltr" style="white-space: nowrap;">${printDate}</bdi></div>
-                <div>الوقت: <bdi dir="ltr" style="white-space: nowrap;">${escapeHtml(printTime)}</bdi></div>
-              </div>
-              <div style="margin-top: 10px;">
-                ${isCancelled
-                  ? '<span class="badge badge-cancelled" style="font-size: 0.8rem; padding: 4px 10px;">حجز ملغي</span>'
-                  : window.DashboardApp.Helpers.getPaymentStatusBadge(invoicePaymentStatusBadge)}
-              </div>
-            </div>
-          </div>
-
-          <!-- Details Section -->
-          <div class="receipt-details-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 28px; border-bottom: 2px solid #e2e8f0; padding-bottom: 24px; margin-bottom: 28px;">
-            <!-- Guest Details -->
-            <div>
-              <h3 style="font-size: 0.95rem; font-weight: 800; color: #1e293b; margin: 0 0 12px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">بيانات النزيل (Guest Details)</h3>
-                <div style="font-size: 0.85rem; line-height: 1.8; color: #475569;">
-                <div><strong style="color: #1e293b;">اسم النزيل:</strong> ${escapeHtml(receiptDigits(inv.guest_name))}</div>
-                <div><strong style="color: #1e293b;">رقم الجوال:</strong> ${escapeHtml(receiptDigits(inv.guest_phone || '-'))}</div>
-                <div><strong style="color: #1e293b;">رقم الهوية / الإقامة:</strong> ${escapeHtml(receiptDigits(inv.guest_id_number || 'غير مسجل'))}</div>
-              </div>
-            </div>
-
-            <!-- Stay Details -->
-            <div>
-              <h3 style="font-size: 0.95rem; font-weight: 800; color: #1e293b; margin: 0 0 12px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">بيانات الإقامة والوحدة (Stay Details)</h3>
-              <div style="font-size: 0.85rem; line-height: 1.8; color: #475569;">
-                <div><strong style="color: #1e293b;">رقم الوحدة:</strong> ${escapeHtml(receiptDigits(inv.room_number))} (${escapeHtml(receiptDigits(inv.room_type || ''))}) ${(inv.transfers && inv.transfers.length > 0) ? `<span style="display: inline-block; background: #e0e7ff; color: #3730a3; padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-right: 4px;">(تم النقل)</span>` : ''}</div>
-                <div><strong style="color: #1e293b;">${isEarlyMorningCheckin ? 'تاريخ الوصول الفعلي:' : 'تاريخ الوصول:'}</strong> <bdi dir="ltr">${isEarlyMorningCheckin ? `${actualArrivalCalendarDate}${actualArrivalTimeStr ? ` (${actualArrivalTimeStr})` : ''}` : checkInReceiptDate}</bdi></div>
-                <div><strong style="color: #1e293b;">${isEarlyMorningCheckin || inv.status === 'مكتمل' ? 'تاريخ المغادرة الفعلي' : 'تاريخ المغادرة'}${isMonthly ? '' : ` (${escapeHtml(invoiceDisplayDuration)})`}:</strong> <bdi dir="ltr">${isEarlyMorningCheckin || inv.status === 'مكتمل' ? `${actualDepartureCalendarDate}${actualDepartureTimeStr ? ` (${actualDepartureTimeStr})` : ''}` : checkOutReceiptDate}</bdi> ${isOverdue ? `<span style="color: #b91c1c; font-weight: 700; font-size: 0.8rem; margin-right: 4px;">(متأخر ${overdueDays} ${overdueDays === 1 ? 'يوم' : 'أيام'})</span>` : ''}</div>
-                ${showRegistrationDate && !isEarlyMorningCheckin ? `<div><strong style="color: #1e293b;">تاريخ التسجيل:</strong> <bdi dir="ltr">${registrationDate}</bdi></div>` : ''}
-                ${inv.checkout_time && !isEarlyMorningCheckin && formatReceiptDate(inv.check_out_date) === checkOutReceiptDate ? `<div><strong style="color: #1e293b;">وقت المغادرة:</strong> <bdi dir="ltr">${formatReceiptTime(inv.checkout_time)}</bdi></div>` : ''}
-                ${policyNote ? `<div style="margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: 0.8rem; font-weight: 700;">${policyNote}</div>` : ''}
-              </div>
-            </div>
-          </div>
-
-          <!-- Items Table -->
-          <div class="receipt-items-wrap" style="margin-bottom: 28px; overflow-x: auto;">
-            <table class="receipt-items-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; table-layout: fixed; word-break: break-word;">
-              <colgroup>
-                <col style="width: 48%;">
-                <col style="width: 18%;">
-                <col style="width: 14%;">
-                <col style="width: 20%;">
-              </colgroup>
-              <thead>
-                <tr style="background: #1e1b4b; color: white;">
-                  <th style="padding: 12px 14px; text-align: right; border-radius: 0 8px 0 0; font-weight: 700;">الوصف والخدمة</th>
-                  <th style="padding: 12px 14px; text-align: center; font-weight: 700;">${isMonthly && !isActualPolicy ? 'سعر الشهر' : 'سعر الليلة / اليوم'}</th>
-                  <th style="padding: 12px 14px; text-align: center; font-weight: 700;">المدة</th>
-                  <th style="padding: 12px 14px; text-align: left; border-radius: 8px 0 0 0; font-weight: 700;">المجموع</th>
+            if (isMonthly && monthlyCycles.length > 1) {
+              itemsTableRowsHtml = monthlyCycles.map((cyc, idx) => `
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 14px;">
+                    <div style="font-weight: 700; color: #1e293b;">إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))} (${cyc.title})</div>
+                    <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">
+                      الفترة من <bdi dir="ltr">${formatReceiptDate(cyc.startDate)}</bdi> إلى <bdi dir="ltr">${formatReceiptDate(cyc.endDate)}</bdi>
+                      ${cyc.receiptNumber ? ` | سند رقم: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(cyc.receiptNumber))}</span>` : ''}
+                    </div>
+                  </td>
+                  <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cyc.rate)} ر.س</td>
+                  <td style="padding: 14px; text-align: center; font-weight: 700; color: #475569;">شهر</td>
+                  <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cyc.rate)} ر.س</td>
                 </tr>
-              </thead>
-              <tbody>
+              `).join('');
+
+              if (extraDaysFee > 0 && !isCancelled) {
+                itemsTableRowsHtml += `
+                  <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 12px 14px;"><div style="font-weight: 700; color: #334155;">رسوم ليالٍ إضافية</div></td>
+                    <td style="padding: 12px 14px; text-align: center; color: #475569;">${formatReceiptMoney(effectiveNightlyRate)} ر.س/يوم</td>
+                    <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
+                    <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #334155;">+ ${formatReceiptMoney(extraDaysFee)} ر.س</td>
+                  </tr>
+                `;
+              }
+            } else {
+              itemsTableRowsHtml = `
                 <tr style="border-bottom: 1px solid #e2e8f0; ${isCancelled ? 'background: #fff8f8;' : ''}">
                   <td style="padding: 14px;">
                     <div style="font-weight: 700; color: #1e293b;">إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))} ${isContract ? '(عقد مفتوح)' : ''}${isEarlyMorningCheckin ? ' (تشمل مبيت الليلة السابقة - دخول فجر مبكر)' : ''}</div>
@@ -1131,256 +1279,327 @@
                             : (inv.custom_nightly_price ? '<span style="color: #05963d; font-weight: 700;">(سعر خاص معتمد)</span>' : '')
                         }`}
                     </div>
-                    ${(isMonthly && !isActualPolicy && inv.transfers && inv.transfers.length > 0) ? (() => {
-                      const totalStayNights = (typeof invoiceNights === 'number' && invoiceNights > 0) ? invoiceNights : 30;
-                      let earlierSum = 0;
-                      let pastNightsTotal = 0;
-                      const lastTr = inv.transfers[inv.transfers.length - 1];
-                      const transferDateStr = formatReceiptDate(lastTr.transfer_business_date || lastTr.transfer_timestamp);
-
-                      const pastLines = inv.transfers.map(tr => {
-                        const pNights = tr.segment_nights || 0;
-                        pastNightsTotal += pNights;
-                        const pRate = Number(tr.from_monthly_price || tr.from_room_monthly_price || 0);
-                        const pAmount = roundMoney((pRate * pNights) / totalStayNights);
-                        earlierSum = roundMoney(earlierSum + pAmount);
-                        return `<div style="color: #334155;">• وحدة <strong>${escapeHtml(receiptDigits(tr.from_room_number || '-'))}</strong> (<bdi dir="ltr">${formatReceiptDate(tr.segment_start_date)}</bdi> إلى <bdi dir="ltr">${formatReceiptDate(tr.segment_end_date)}</bdi> - ${escapeHtml(receiptDigits(pNights))} ${pNights === 1 ? 'ليلة' : 'ليالٍ'}) بسعر شهر ${formatReceiptMoney(pRate)} ر.س = <strong>${formatReceiptMoney(pAmount)} ر.س</strong></div>`;
-                      });
-
-                      const curNights = Math.max(0, totalStayNights - pastNightsTotal);
-                      const curStartDate = lastTr.segment_end_date || lastTr.transfer_business_date;
-                      const curEndDate = receiptScheduledCheckoutDate;
-                      const curRate = Number(lastTr.to_monthly_price || inv.monthly_price || 0);
-                      const curAmount = roundMoney(shownRate - earlierSum);
-
-                      const curLine = `<div style="color: #334155;">• وحدة <strong>${escapeHtml(receiptDigits(inv.room_number))}</strong> (<bdi dir="ltr">${formatReceiptDate(curStartDate)}</bdi> إلى <bdi dir="ltr">${formatReceiptDate(curEndDate)}</bdi> - ${escapeHtml(receiptDigits(curNights))} ${curNights === 1 ? 'ليلة' : 'ليالٍ'}) بسعر شهر ${formatReceiptMoney(curRate)} ر.س = <strong>${formatReceiptMoney(curAmount)} ر.س</strong></div>`;
-
-                      return `
-                        <div style="margin-top: 8px; padding: 8px 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 0.78rem; line-height: 1.6; color: #1e293b;">
-                          <div style="font-weight: 800; color: #166534; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
-                            <span>طريقة احتساب قيمة الشهر بعد الترقية:</span>
-                            <span style="font-size: 0.72rem; color: #475569;">(${escapeHtml(receiptDigits(totalStayNights))} ليلة | تاريخ النقل: <bdi dir="ltr">${transferDateStr}</bdi>)</span>
-                          </div>
-                          ${pastLines.join('')}
-                          ${curLine}
-                          <div style="border-top: 1px dashed #86efac; margin-top: 5px; padding-top: 4px; font-weight: 800; color: #166534;">
-                            &larr; المعادلة: ${inv.transfers.map(tr => formatReceiptMoney(roundMoney(((Number(tr.from_monthly_price || tr.from_room_monthly_price || 0)) * (tr.segment_nights || 0)) / totalStayNights))).join(' + ')} + ${formatReceiptMoney(curAmount)} = <strong>${formatReceiptMoney(shownRate)} ر.س</strong> (قبل الخصم)
-                          </div>
-                        </div>
-                      `;
-                    })() : ''}
                   </td>
                   <td style="padding: 14px; text-align: center; color: #475569;">
-                    ${isCancelled ? '0.00 ر.س' : (
-                      (isMonthly && !isActualPolicy && inv.transfers && inv.transfers.length > 0)
-                        ? `
-                          <div style="font-weight: 700; color: #1e1b4b; font-size: 0.95rem;">${formatReceiptMoney(inv.transfers[inv.transfers.length - 1].to_monthly_price || inv.monthly_price || shownRate)} ر.س</div>
-                          <div style="font-size: 0.72rem; color: #64748b; margin-top: 1px;">سعر شهر الوحدة</div>
-                          <div style="font-size: 0.75rem; color: #1d4ed8; font-weight: 700; margin-top: 3px; border-top: 1px dashed #cbd5e1; padding-top: 2px;">
-                            سعر الشهر بعد الترقية: ${formatReceiptMoney(shownRate)} ر.س
-                          </div>
-                        `
-                        : `${formatReceiptMoney(shownRate)} ر.س`
-                    )}
+                    ${isCancelled ? '0.00 ر.س' : `${formatReceiptMoney(shownRate)} ر.س`}
                   </td>
                   <td style="padding: 14px; text-align: center; font-weight: 700; color: #475569;">${isMonthly && !isActualPolicy ? 'شهر' : (isContract && isConfirmed ? `${elapsedContractNights} ليالٍ` : (isEarlyMorningCheckin ? `${invoiceNights} ${invoiceNights === 1 ? 'ليلة' : 'ليالٍ'}` : invoiceDurationText))}</td>
                   <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(isCancelled ? 0 : (isContract && isConfirmed ? ((inv.running_total !== undefined && inv.running_total !== null) ? Number(inv.running_total) : (elapsedContractNights * effectiveNightlyRate)) : shownSubtotal))} ر.س</td>
                 </tr>
-                ${isOverdue && overdueAdditionalAmount > 0 && !isCancelled ? `
-                  <tr style="background: #fff7ed; border-bottom: 1px solid #ffedd5;">
-                    <td style="padding: 12px 14px;">
-                      <div style="font-weight: 700; color: #c2410c;">ليالٍ إضافية لتأخير المغادرة (${overdueDays} ${overdueDays === 1 ? 'ليلة متأخرة' : 'ليالٍ متأخرة'})</div>
-                      <div style="font-size: 0.75rem; color: #ea580c; margin-top: 2px;">استمرار الإقامة بعد موعد المغادرة المحدد حتى تاريخ اليوم (<bdi dir="ltr">${businessToday}</bdi>)</div>
-                    </td>
-                    <td style="padding: 12px 14px; text-align: center; color: #ea580c;">${formatReceiptMoney(effectiveNightlyRate)} ر.س</td>
-                    <td style="padding: 12px 14px; text-align: center; font-weight: 700; color: #ea580c;">${overdueDays} ${overdueDays === 1 ? 'ليلة' : 'ليالٍ'}</td>
-                    <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #c2410c;">+ ${formatReceiptMoney(overdueAdditionalAmount)} ر.س</td>
-                  </tr>
-                ` : ''}
-                ${isMonthly && monthlyExtensionAmount > 0 && !isCancelled ? `
+                ${isMonthly && monthlyExtensionAmount > 0 && monthlyCycles.length <= 1 && !isCancelled ? `
                   <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding: 12px 14px;"><div style="font-weight: 700; color: #334155;">رسوم التمديد بالسعر اليومي</div></td>
+                    <td style="padding: 12px 14px;"><div style="font-weight: 700; color: #334155;">رسوم ليالٍ إضافية</div></td>
                     <td style="padding: 12px 14px; text-align: center; color: #475569;">${formatReceiptMoney(effectiveNightlyRate)} ر.س/يوم</td>
                     <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
                     <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #334155;">+ ${formatReceiptMoney(monthlyExtensionAmount)} ر.س</td>
                   </tr>
                 ` : ''}
+              `;
+            }
+
+            if (isOverdue && overdueAdditionalAmount > 0 && !isCancelled) {
+              itemsTableRowsHtml += `
+                <tr style="background: #fff7ed; border-bottom: 1px solid #ffedd5;">
+                  <td style="padding: 12px 14px;">
+                    <div style="font-weight: 700; color: #c2410c;">ليالٍ إضافية لتأخير المغادرة (${overdueDays} ${overdueDays === 1 ? 'ليلة متأخرة' : 'ليالٍ متأخرة'})</div>
+                    <div style="font-size: 0.75rem; color: #ea580c; margin-top: 2px;">استمرار الإقامة بعد موعد المغادرة المحدد حتى تاريخ اليوم (<bdi dir="ltr">${businessToday}</bdi>)</div>
+                  </td>
+                  <td style="padding: 12px 14px; text-align: center; color: #ea580c;">${formatReceiptMoney(effectiveNightlyRate)} ر.س</td>
+                  <td style="padding: 12px 14px; text-align: center; font-weight: 700; color: #ea580c;">${overdueDays} ${overdueDays === 1 ? 'ليلة' : 'ليالٍ'}</td>
+                  <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #c2410c;">+ ${formatReceiptMoney(overdueAdditionalAmount)} ر.س</td>
+                </tr>
+              `;
+            }
+
+            if (discount > 0 && !isCancelled) {
+              itemsTableRowsHtml += `
+                <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 12px 14px;">
+                    <div style="font-weight: 700; color: #334155;">خصم وتخفيض معتمد${discountReasonText}</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">تخفيض ممنوح على إجمالي قيمة الإقامة</div>
+                  </td>
+                  <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
+                  <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
+                  <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #334155;" dir="ltr">- ${formatReceiptMoney(discount)} ر.س</td>
+                </tr>
+              `;
+            }
+
+            if (lateFee > 0 && !isCancelled) {
+              itemsTableRowsHtml += `
+                <tr style="background: #fff7ed; border-bottom: 1px solid #ffedd5;">
+                  <td style="padding: 12px 14px;">
+                    <div style="font-weight: 700; color: #c2410c;">مبلغ إضافي لتأخير المغادرة</div>
+                    <div style="font-size: 0.75rem; color: #ea580c; margin-top: 2px;">تم اعتماده يدويًا عند التسوية</div>
+                  </td>
+                  <td style="padding: 12px 14px; text-align: center; color: #ea580c;">-</td>
+                  <td style="padding: 12px 14px; text-align: center; color: #ea580c;">-</td>
+                  <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #c2410c; white-space: nowrap;">+ ${formatReceiptMoney(lateFee)} ر.س</td>
+                </tr>
+              `;
+            }
+
+            if (hasCancellationAdjustment) {
+              itemsTableRowsHtml += `
+                <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 12px 14px;">
+                    <div style="font-weight: 700; color: #4338ca;">تعديل إداري معتمد لمبلغ الإلغاء</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">الحساب التلقائي الأصلي قبل التعديل: ${formatReceiptMoney(inv.original_calculated_charge)} ر.س</div>
+                  </td>
+                  <td style="padding: 12px 14px; text-align: center;">-</td>
+                  <td style="padding: 12px 14px; text-align: center;">-</td>
+                  <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #4338ca;">${formatReceiptMoney(inv.total_price || 0)} ر.س</td>
+                </tr>
+              `;
+            }
+
+            if (deposit > 0) {
+              itemsTableRowsHtml += `
+                <tr style="background: #fdf4ff; border-bottom: 1px solid #fae8ff;">
+                  <td style="padding: 12px 14px;">
+                    <div style="font-weight: 700; color: #701a75;">رصيد التأمين المسجل (Deposit Balance)</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">${legacyDeposit ? 'قيمة تاريخية بلا سند حركة، وتحتاج مراجعة قبل ردها' : 'مبلغ محفوظ للتأمين ويتطلب تسوية عند المغادرة'}</div>
+                  </td>
+                  <td style="padding: 12px 14px; text-align: center;">-</td>
+                  <td style="padding: 12px 14px; text-align: center;">-</td>
+                  <td style="padding: 12px 14px; text-align: left; font-weight: 700; color: #701a75;">${formatReceiptMoney(deposit)} ر.س</td>
+                </tr>
+              `;
+            }
+
+            totalsCardHtml = `
+              <div class="receipt-totals-card">
                 ${discount > 0 && !isCancelled ? `
-                  <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding: 12px 14px;">
-                      <div style="font-weight: 700; color: #334155;">خصم وتخفيض معتمد${discountReasonText}</div>
-                      <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">تخفيض ممنوح على إجمالي قيمة الإقامة</div>
-                    </td>
-                    <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
-                    <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
-                    <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #334155;" dir="ltr">- ${formatReceiptMoney(discount)} ر.س</td>
-                  </tr>
+                  <div class="receipt-total-line">
+                    <span>المجموع قبل الخصم:</span>
+                    <span dir="ltr">${formatReceiptMoney(total + discount)} ر.س</span>
+                  </div>
+                  <div class="receipt-total-line receipt-total-discount">
+                    <span>الخصم المعتمد:</span>
+                    <span dir="ltr">- ${formatReceiptMoney(discount)} ر.س</span>
+                  </div>
                 ` : ''}
-                ${lateFee > 0 && !isCancelled ? `
-                  <tr style="background: #fff7ed; border-bottom: 1px solid #ffedd5;">
-                    <td style="padding: 12px 14px;">
-                      <div style="font-weight: 700; color: #c2410c;">مبلغ إضافي لتأخير المغادرة</div>
-                      <div style="font-size: 0.75rem; color: #ea580c; margin-top: 2px;">تم اعتماده يدويًا عند التسوية</div>
-                    </td>
-                    <td style="padding: 12px 14px; text-align: center; color: #ea580c;">-</td>
-                    <td style="padding: 12px 14px; text-align: center; color: #ea580c;">-</td>
-                    <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #c2410c; white-space: nowrap;">+ ${formatReceiptMoney(lateFee)} ر.س</td>
-                  </tr>
-                ` : ''}
-                ${hasCancellationAdjustment ? `
-                  <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding: 12px 14px;">
-                      <div style="font-weight: 700; color: #4338ca;">تعديل إداري معتمد لمبلغ الإلغاء</div>
-                      <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">الحساب التلقائي الأصلي قبل التعديل: ${formatReceiptMoney(inv.original_calculated_charge)} ر.س</div>
-                    </td>
-                    <td style="padding: 12px 14px; text-align: center;">-</td>
-                    <td style="padding: 12px 14px; text-align: center;">-</td>
-                    <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #4338ca;">${formatReceiptMoney(inv.total_price || 0)} ر.س</td>
-                  </tr>
-                ` : ''}
-                ${deposit > 0 ? `
-                  <tr style="background: #fdf4ff; border-bottom: 1px solid #fae8ff;">
-                    <td style="padding: 12px 14px;">
-                      <div style="font-weight: 700; color: #701a75;">رصيد التأمين المسجل (Deposit Balance)</div>
-                      <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">${legacyDeposit ? 'قيمة تاريخية بلا سند حركة، وتحتاج مراجعة قبل ردها' : 'مبلغ محفوظ للتأمين ويتطلب تسوية عند المغادرة'}</div>
-                    </td>
-                    <td style="padding: 12px 14px; text-align: center;">-</td>
-                    <td style="padding: 12px 14px; text-align: center;">-</td>
-                    <td style="padding: 12px 14px; text-align: left; font-weight: 700; color: #701a75;">${formatReceiptMoney(deposit)} ر.س</td>
-                  </tr>
-                ` : ''}
-              </tbody>
-            </table>
-          </div>
-
-          ${(inv.transfers && inv.transfers.length > 0) ? `
-            <div class="receipt-transfers-card">
-              <div style="font-weight: 800; color: #1e1b4b; font-size: 0.85rem; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
-                <span>سجل حركات نقل وترقية الغرف خلال الإقامة:</span>
-                <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">(إجمالي حركات النقل: ${inv.transfers.length})</span>
-              </div>
-              <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; table-layout: fixed; word-break: break-word;">
-                <colgroup>
-                  <col style="width: 14%;">
-                  <col style="width: 20%;">
-                  <col style="width: 15%;">
-                  <col style="width: 20%;">
-                  <col style="width: 16%;">
-                  <col style="width: 15%;">
-                </colgroup>
-                <thead>
-                  <tr style="border-bottom: 1px solid #cbd5e1; color: #475569; background: #f1f5f9;">
-                    <th style="padding: 5px 8px; text-align: right;">تاريخ العملية</th>
-                    <th style="padding: 5px 8px; text-align: right;">مسار النقل</th>
-                    <th style="padding: 5px 8px; text-align: center;">نوع العملية</th>
-                    <th style="padding: 5px 8px; text-align: right;">فترة الغرفة السابقة</th>
-                    <th style="padding: 5px 8px; text-align: left;">${isMonthly ? 'سعر الشهر السابق' : 'سعر الليلة السابق'}</th>
-                    <th style="padding: 5px 8px; text-align: right;">السبب / الملاحظات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${inv.transfers.map(tr => {
-                    const modeText = tr.transfer_mode === 'upgrade_pay_difference'
-                      ? '<span style="color: #1d4ed8; font-weight: 700;">ترقية بفارق سعر</span>'
-                      : (tr.transfer_mode === 'upgrade_free'
-                        ? '<span style="color: #15803d; font-weight: 700;">ترقية مجانية</span>'
-                        : '<span style="color: #475569;">بنفس السعر</span>');
-                    const fromRateHtml = isMonthly
-                      ? `<div>${formatReceiptMoney(tr.from_room_monthly_price || 2400)} ر.س / شهر</div>`
-                      : `<div>${formatReceiptMoney(tr.from_rate || tr.pinned_rate || tr.from_room_price_per_night || 0)} ر.س / ليلة</div>`;
-                    return `
-                      <tr style="border-bottom: 1px dashed #e2e8f0; color: #334155;">
-                        <td style="padding: 5px 8px;"><bdi dir="ltr">${escapeHtml(formatReceiptDate(tr.transfer_business_date || tr.transfer_timestamp))}</bdi></td>
-                        <td style="padding: 5px 8px; font-weight: 700;">من وحدة ${escapeHtml(receiptDigits(tr.from_room_number || '-'))} إلى وحدة ${escapeHtml(receiptDigits(tr.to_room_number || '-'))}</td>
-                        <td style="padding: 5px 8px; text-align: center;">${modeText}</td>
-                        <td style="padding: 5px 8px;"><bdi dir="ltr">${escapeHtml(formatReceiptDate(tr.segment_start_date))} إلى ${escapeHtml(formatReceiptDate(tr.segment_end_date))}</bdi> (${escapeHtml(receiptDigits(tr.segment_nights || 0))} ليالٍ)</td>
-                        <td style="padding: 5px 8px; text-align: left; font-weight: 700;">${fromRateHtml}</td>
-                        <td style="padding: 5px 8px; color: #64748b;">${escapeHtml(receiptDigits(tr.reason_details || (tr.reason_category === 'maintenance' ? 'صيانة الغرفة' : (tr.reason_category === 'guest_request' ? 'طلب النزيل' : 'نقل إداري'))))}</td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
-            </div>
-          ` : ''}
-
-          <div class="receipt-payment-notice">
-            <div>
-              <span style="font-weight: 700; color: #1e293b;">طريقة السداد:</span>
-              <span style="color: #475569; margin-right: 4px;">${escapeHtml(receiptDigits(inv.payment_method || 'نقداً'))}</span>
-            </div>
-            <div>
-              هذا المستند سند استلام رسمي ومعتمد
-            </div>
-          </div>
-
-          <!-- Policies and totals stay together below the items table. -->
-          <div class="receipt-summary-row" dir="rtl">
-            <section class="receipt-policy-card" aria-label="سياسة الإقامة والشروط">
-              <h3>سياسة الإقامة والشروط</h3>
-              <ol>${displayedPolicies.map((policy, index) => `<li><span class="receipt-policy-number" dir="ltr">${index + 1}.</span><span>${escapeHtml(receiptDigits(policy))}</span></li>`).join('')}</ol>
-            </section>
-            <div class="receipt-totals-card">
-              ${discount > 0 && !isCancelled ? `
-                <div class="receipt-total-line">
-                  <span>المجموع قبل الخصم:</span>
-                  <span dir="ltr">${formatReceiptMoney(total + discount)} ر.س</span>
+                <div class="receipt-total-line receipt-total-net">
+                  <span>الإجمالي الصافي:</span>
+                  <span dir="ltr">${formatReceiptMoney(total)} ر.س ${(isOverdue || (isContract && isConfirmed)) ? '<small style="color: #b91c1c; font-size: 0.72rem; font-weight: 700;">(المستحق حتى اليوم)</small>' : ''}</span>
                 </div>
-                <div class="receipt-total-line receipt-total-discount">
-                  <span>الخصم المعتمد:</span>
-                  <span dir="ltr">- ${formatReceiptMoney(discount)} ر.س</span>
+                ${(originalCollected > paid && refundedTotal > 0) ? `
+                  <div class="receipt-total-line">
+                    <span>المبلغ المسدد مسبقا:</span>
+                    <span dir="ltr">${formatReceiptMoney(originalCollected)} ر.س</span>
+                  </div>
+                  <div class="receipt-total-line">
+                    <span>المبلغ المسترد:</span>
+                    <span dir="ltr">- ${formatReceiptMoney(refundedTotal)} ر.س</span>
+                  </div>
+                ` : (refundedTotal > 0 ? `
+                  <div class="receipt-total-line">
+                    <span>المبلغ المسترد:</span>
+                    <span dir="ltr">- ${formatReceiptMoney(refundedTotal)} ر.س</span>
+                  </div>
+                ` : '')}
+                <div class="receipt-total-line receipt-total-paid">
+                  <span>${refundedTotal > 0 ? 'صافي المدفوع:' : 'المبلغ المدفوع:'}</span>
+                  <span dir="ltr">${formatReceiptMoney(paid)} ر.س</span>
+                </div>
+                <div class="receipt-total-line receipt-total-remaining" style="${isCredit ? 'background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 4px 8px; ' : ''}color: ${isCancelled ? '#05963d' : (isCredit ? '#1d4ed8' : (remaining > 0 ? '#dc2626' : '#05963d'))};">
+                  <span>${isCancelled ? 'المبلغ المتبقي:' : (isCredit ? 'رصيد دائن للنزيل (مستحق له):' : 'المبلغ المتبقي:')}</span>
+                  <span dir="ltr">${formatReceiptMoney(isCancelled ? 0 : (isCredit ? Math.abs(rawRemaining) : remaining))} ر.س</span>
+                </div>
+              </div>
+            `;
+          }
+
+          invoicePrintableArea.innerHTML = `
+            ${receiptDocumentStyles}
+            ${receiptPrintFitScript}
+            <div class="receipt-document" dir="rtl">
+              ${isMonthly ? `
+                <div style="text-align: center; margin-bottom: 32px; margin-top: 10px; display: flex; flex-direction: column; align-items: center;">
+                  <h1 style="font-family: 'Cairo', 'Tajawal', sans-serif; font-size: 1.8rem; font-weight: 700; color: #1e293b; margin: 0 0 10px 0; letter-spacing: normal; font-synthesis: none; text-rendering: optimizeLegibility;">عقد إيجار</h1>
+                  <div style="height: 3px; width: 110px; background-color: #94a3b8; border-radius: 2px;"></div>
                 </div>
               ` : ''}
-              <div class="receipt-total-line receipt-total-net">
-                <span>الإجمالي الصافي:</span>
-                <span dir="ltr">${formatReceiptMoney(total)} ر.س ${(isOverdue || (isContract && isConfirmed)) ? '<small style="color: #b91c1c; font-size: 0.72rem; font-weight: 700;">(المستحق حتى اليوم)</small>' : ''}</span>
-              </div>
-              ${(originalCollected > paid && refundedTotal > 0) ? `
-                <div class="receipt-total-line">
-                  <span>المبلغ المسدد مسبقا:</span>
-                  <span dir="ltr">${formatReceiptMoney(originalCollected)} ر.س</span>
-                </div>
-                <div class="receipt-total-line">
-                  <span>المبلغ المسترد:</span>
-                  <span dir="ltr">- ${formatReceiptMoney(refundedTotal)} ر.س</span>
-                </div>
-              ` : (refundedTotal > 0 ? `
-                <div class="receipt-total-line">
-                  <span>المبلغ المسترد:</span>
-                  <span dir="ltr">- ${formatReceiptMoney(refundedTotal)} ر.س</span>
-                </div>
-              ` : '')}
-              <div class="receipt-total-line receipt-total-paid">
-                <span>${refundedTotal > 0 ? 'صافي المدفوع:' : 'المبلغ المدفوع:'}</span>
-                <span dir="ltr">${formatReceiptMoney(paid)} ر.س</span>
-              </div>
-              <div class="receipt-total-line receipt-total-remaining" style="${isCredit ? 'background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 4px 8px; ' : ''}color: ${isCancelled ? '#05963d' : (isCredit ? '#1d4ed8' : (remaining > 0 ? '#dc2626' : '#05963d'))};">
-                <span>${isCancelled ? 'المبلغ المتبقي:' : (isCredit ? 'رصيد دائن للنزيل (مستحق له):' : 'المبلغ المتبقي:')}</span>
-                <span dir="ltr">${formatReceiptMoney(isCancelled ? 0 : (isCredit ? Math.abs(rawRemaining) : remaining))} ر.س</span>
-              </div>
-            </div>
-          </div>
 
-          <div class="receipt-signature-row ${isMonthly ? 'receipt-signature-monthly' : ''}" dir="rtl">
-            ${isMonthly ? `<div class="receipt-signature-cell"><strong>ختم المؤسسة</strong><img class="receipt-seal" src="${activeBrand.seal || 'assets/seal.svg'}" alt="الختم" onerror="this.style.display='none'"></div>` : ''}
-            <div class="receipt-signature-cell"><strong>توقيع الموظف</strong><div class="receipt-signature-line receipt-staff-signature-line">${isMonthly ? `<img src="${activeBrand.signature || 'assets/signature.svg'}" alt="التوقيع" onerror="this.style.display='none'">` : ''}</div></div>
-            <div class="receipt-signature-cell receipt-receiver-signature"><strong>${isMonthly ? 'توقيع المستأجر' : 'توقيع المستلم'}</strong><div class="receipt-signature-line"></div><small>بتوقيعي أقر بالاطلاع على الشروط أعلاه والموافقة عليها.</small></div>
-          </div>
+              <!-- Top Section: Company & Receipt Info -->
+              <div class="receipt-header" style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 24px; margin-bottom: 28px;">
+                <!-- Company Info (Right) -->
+                <div style="display: flex; gap: 16px; align-items: flex-start;">
+                  ${activeBrand.logo ? `<img src="${activeBrand.logo}" alt="شعار الفندق" style="width: 52px; height: 52px; border-radius: 8px; object-fit: contain; border: 1px solid #e2e8f0; background: #fff; padding: 2px;">` : ''}
+                  <div>
+                    <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? (activeBrand.companyAr || 'مؤسسة مكتب شمس المنازل للخدمات العقارية') : (activeBrand.nameAr || 'ريحانة للوحدات السكنية')}</h2>
+                    <div style="font-size: 0.85rem; color: #64748b; line-height: 1.6;">
+                      <div>العنوان: ${escapeHtml(activeBrand.address || 'الخبر - الثقبة')} </div>
+                      <div>الرمز البريدي: ${escapeHtml(activeBrand.postalCode || '34625')}</div>
+                      <div>هاتف الاستقبال: ${escapeHtml(activeBrand.phone || '0560631783')}</div>
+                      ${isMonthly ? (activeBrand.crNumber && activeBrand.crNumber !== '7038955915' ? `<div>الرقم الموحد: ${escapeHtml(activeBrand.crNumber)}</div>` : '<div>الرقم الموحد: 7038955915</div>') : ''}
+                    </div>
+                  </div>
+                </div>
 
-          ${invoiceDepositMovements.length ? `
-            <div class="receipt-deposit-movements">
-              <h4 style="font-size: 0.9rem; font-weight: 800; color: #5b21b6; margin-bottom: 8px;">سجل حركات التأمين</h4>
-              <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
-                <thead><tr style="background: #f5f3ff;"><th style="padding: 6px; text-align: right;">التاريخ</th><th style="padding: 6px; text-align: center;">الحركة</th><th style="padding: 6px; text-align: center;">المبلغ</th><th style="padding: 6px; text-align: center;">الطريقة</th><th style="padding: 6px; text-align: right;">السبب / الموظف</th></tr></thead>
-                <tbody>${invoiceDepositMovements.map(m => {
-                  const labels = { collected: 'استلام', reconciled: 'مطابقة رصيد قديم', refunded: 'رد', applied: 'تسوية على الإقامة', retained: 'احتفاظ' };
-                  return `<tr style="border-bottom: 1px solid #ede9fe;"><td style="padding: 6px;"><bdi dir="ltr">${formatReceiptDateTime(m.movement_date)}</bdi></td><td style="padding: 6px; text-align: center;">${labels[m.movement_type] || escapeHtml(receiptDigits(m.movement_type))}</td><td style="padding: 6px; text-align: center;">${formatReceiptMoney(m.amount)} ر.س</td><td style="padding: 6px; text-align: center;">${escapeHtml(receiptDigits(m.payment_method || 'نقداً'))}</td><td style="padding: 6px;">${escapeHtml(receiptDigits(m.reason || ''))}${m.staff_username ? ` - ${escapeHtml(receiptDigits(m.staff_username))}` : ''}</td></tr>`;
-                }).join('')}</tbody>
-              </table>
+                <!-- Receipt Info (Left) -->
+                <div style="background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 14px 18px; text-align: right; min-width: 220px;">
+                  <div style="display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 800; margin-bottom: 10px;">
+                    ${isCancelled ? 'سند حجز ملغي' : 'سند'}
+                  </div>
+                  <div style="font-size: 0.85rem; color: #475569; line-height: 1.7;">
+                    <div><span style="font-weight: 700; color: #1e293b;">رقم السند:</span> <span style="font-family: monospace; color: #4338ca; font-weight: 700;">${displayReceiptNum}</span></div>
+                    <div>تاريخ الإصدار: <bdi dir="ltr" style="white-space: nowrap;">${displayPrintDate}</bdi></div>
+                    <div>الوقت: <bdi dir="ltr" style="white-space: nowrap;">${escapeHtml(displayPrintTime)}</bdi></div>
+                  </div>
+                  <div style="margin-top: 10px;">
+                    ${isCancelled
+                      ? '<span class="badge badge-cancelled" style="font-size: 0.8rem; padding: 4px 10px;">حجز ملغي</span>'
+                      : displayPaymentBadgeHtml}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Details Section -->
+              <div class="receipt-details-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 28px; border-bottom: 2px solid #e2e8f0; padding-bottom: 24px; margin-bottom: 28px;">
+                <!-- Guest Details -->
+                <div>
+                  <h3 style="font-size: 0.95rem; font-weight: 800; color: #1e293b; margin: 0 0 12px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">بيانات النزيل (Guest Details)</h3>
+                  <div style="font-size: 0.85rem; line-height: 1.8; color: #475569;">
+                    <div><strong style="color: #1e293b;">اسم النزيل:</strong> ${escapeHtml(receiptDigits(inv.guest_name))}</div>
+                    <div><strong style="color: #1e293b;">رقم الجوال:</strong> ${escapeHtml(receiptDigits(inv.guest_phone || '-'))}</div>
+                    <div><strong style="color: #1e293b;">رقم الهوية / الإقامة:</strong> ${escapeHtml(receiptDigits(inv.guest_id_number || 'غير مسجل'))}</div>
+                  </div>
+                </div>
+
+                <!-- Stay Details -->
+                <div>
+                  <h3 style="font-size: 0.95rem; font-weight: 800; color: #1e293b; margin: 0 0 12px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">بيانات الإقامة والوحدة (Stay Details)</h3>
+                  <div style="font-size: 0.85rem; line-height: 1.8; color: #475569;">
+                    <div><strong style="color: #1e293b;">رقم الوحدة:</strong> ${escapeHtml(receiptDigits(inv.room_number))} (${escapeHtml(receiptDigits(inv.room_type || ''))}) ${(inv.transfers && inv.transfers.length > 0) ? `<span style="display: inline-block; background: #e0e7ff; color: #3730a3; padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-right: 4px;">(تم النقل)</span>` : ''}</div>
+                    <div><strong style="color: #1e293b;">${isEarlyMorningCheckin ? 'تاريخ الوصول الفعلي:' : 'تاريخ الوصول:'}</strong> <bdi dir="ltr">${displayCheckIn}</bdi></div>
+                    <div><strong style="color: #1e293b;">${isEarlyMorningCheckin || inv.status === 'مكتمل' ? 'تاريخ المغادرة الفعلي' : 'تاريخ المغادرة'}${isMonthly ? '' : ` (${escapeHtml(displayDuration)})`}:</strong> <bdi dir="ltr">${displayCheckOut}</bdi> ${isOverdue && !isSingleCycleView ? `<span style="color: #b91c1c; font-weight: 700; font-size: 0.8rem; margin-right: 4px;">(متأخر ${overdueDays} ${overdueDays === 1 ? 'يوم' : 'أيام'})</span>` : ''}</div>
+                    ${showRegistrationDate && !isEarlyMorningCheckin && !isSingleCycleView ? `<div><strong style="color: #1e293b;">تاريخ التسجيل:</strong> <bdi dir="ltr">${registrationDate}</bdi></div>` : ''}
+                    ${inv.checkout_time && !isEarlyMorningCheckin && !isSingleCycleView && formatReceiptDate(inv.check_out_date) === checkOutReceiptDate ? `<div><strong style="color: #1e293b;">وقت المغادرة:</strong> <bdi dir="ltr">${formatReceiptTime(inv.checkout_time)}</bdi></div>` : ''}
+                    ${policyNote && !isSingleCycleView ? `<div style="margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: 0.8rem; font-weight: 700;">${policyNote}</div>` : ''}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Items Table -->
+              <div class="receipt-items-wrap" style="margin-bottom: 28px; overflow-x: auto;">
+                <table class="receipt-items-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; table-layout: fixed; word-break: break-word;">
+                  <colgroup>
+                    <col style="width: 48%;">
+                    <col style="width: 18%;">
+                    <col style="width: 14%;">
+                    <col style="width: 20%;">
+                  </colgroup>
+                  <thead>
+                    <tr style="background: #1e1b4b; color: white;">
+                      <th style="padding: 12px 14px; text-align: right; border-radius: 0 8px 0 0; font-weight: 700;">الوصف والخدمة</th>
+                      <th style="padding: 12px 14px; text-align: center; font-weight: 700;">${isMonthly && !isActualPolicy ? 'سعر الشهر' : 'سعر الليلة / اليوم'}</th>
+                      <th style="padding: 12px 14px; text-align: center; font-weight: 700;">المدة</th>
+                      <th style="padding: 12px 14px; text-align: left; border-radius: 8px 0 0 0; font-weight: 700;">المجموع</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${itemsTableRowsHtml}
+                  </tbody>
+                </table>
+              </div>
+
+              ${(inv.transfers && inv.transfers.length > 0 && !isSingleCycleView) ? `
+                <div class="receipt-transfers-card">
+                  <div style="font-weight: 800; color: #1e1b4b; font-size: 0.85rem; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                    <span>سجل حركات نقل وترقية الغرف خلال الإقامة:</span>
+                    <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">(إجمالي حركات النقل: ${inv.transfers.length})</span>
+                  </div>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; table-layout: fixed; word-break: break-word;">
+                    <colgroup>
+                      <col style="width: 14%;">
+                      <col style="width: 20%;">
+                      <col style="width: 15%;">
+                      <col style="width: 20%;">
+                      <col style="width: 16%;">
+                      <col style="width: 15%;">
+                    </colgroup>
+                    <thead>
+                      <tr style="border-bottom: 1px solid #cbd5e1; color: #475569; background: #f1f5f9;">
+                        <th style="padding: 5px 8px; text-align: right;">تاريخ العملية</th>
+                        <th style="padding: 5px 8px; text-align: right;">مسار النقل</th>
+                        <th style="padding: 5px 8px; text-align: center;">نوع العملية</th>
+                        <th style="padding: 5px 8px; text-align: right;">فترة الغرفة السابقة</th>
+                        <th style="padding: 5px 8px; text-align: left;">${isMonthly ? 'سعر الشهر السابق' : 'سعر الليلة السابق'}</th>
+                        <th style="padding: 5px 8px; text-align: right;">السبب / الملاحظات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${inv.transfers.map(tr => {
+                        const modeText = tr.transfer_mode === 'upgrade_pay_difference'
+                          ? '<span style="color: #1d4ed8; font-weight: 700;">ترقية بفارق سعر</span>'
+                          : (tr.transfer_mode === 'upgrade_free'
+                            ? '<span style="color: #15803d; font-weight: 700;">ترقية مجانية</span>'
+                            : '<span style="color: #475569;">بنفس السعر</span>');
+                        const fromRateHtml = isMonthly
+                          ? `<div>${formatReceiptMoney(tr.from_room_monthly_price || 2400)} ر.س / شهر</div>`
+                          : `<div>${formatReceiptMoney(tr.from_rate || tr.pinned_rate || tr.from_room_price_per_night || 0)} ر.س / ليلة</div>`;
+                        return `
+                          <tr style="border-bottom: 1px dashed #e2e8f0; color: #334155;">
+                            <td style="padding: 5px 8px;"><bdi dir="ltr">${escapeHtml(formatReceiptDate(tr.transfer_business_date || tr.transfer_timestamp))}</bdi></td>
+                            <td style="padding: 5px 8px; font-weight: 700;">من وحدة ${escapeHtml(receiptDigits(tr.from_room_number || '-'))} إلى وحدة ${escapeHtml(receiptDigits(tr.to_room_number || '-'))}</td>
+                            <td style="padding: 5px 8px; text-align: center;">${modeText}</td>
+                            <td style="padding: 5px 8px;"><bdi dir="ltr">${escapeHtml(formatReceiptDate(tr.segment_start_date))} إلى ${escapeHtml(formatReceiptDate(tr.segment_end_date))}</bdi> (${escapeHtml(receiptDigits(tr.segment_nights || 0))} ليالٍ)</td>
+                            <td style="padding: 5px 8px; text-align: left; font-weight: 700;">${fromRateHtml}</td>
+                            <td style="padding: 5px 8px; color: #64748b;">${escapeHtml(receiptDigits(tr.reason_details || (tr.reason_category === 'maintenance' ? 'صيانة الغرفة' : (tr.reason_category === 'guest_request' ? 'طلب النزيل' : 'نقل إداري'))))}</td>
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              ` : ''}
+
+              <div class="receipt-payment-notice">
+                <div>
+                  <span style="font-weight: 700; color: #1e293b;">طريقة السداد:</span>
+                  <span style="color: #475569; margin-right: 4px;">${displayPaymentMethod}</span>
+                </div>
+                <div>
+                  هذا المستند سند استلام رسمي ومعتمد
+                </div>
+              </div>
+
+              <!-- Policies and totals stay together below the items table. -->
+              <div class="receipt-summary-row" dir="rtl">
+                <section class="receipt-policy-card" aria-label="سياسة الإقامة والشروط">
+                  <h3>سياسة الإقامة والشروط</h3>
+                  <ol>${displayedPolicies.map((policy, index) => `<li><span class="receipt-policy-number" dir="ltr">${index + 1}.</span><span>${escapeHtml(receiptDigits(policy))}</span></li>`).join('')}</ol>
+                </section>
+                ${totalsCardHtml}
+              </div>
+
+              <div class="receipt-signature-row ${isMonthly ? 'receipt-signature-monthly' : ''}" dir="rtl">
+                ${isMonthly ? `<div class="receipt-signature-cell"><strong>ختم المؤسسة</strong><img class="receipt-seal" src="${activeBrand.seal || 'assets/seal.svg'}" alt="الختم" onerror="this.style.display='none'"></div>` : ''}
+                <div class="receipt-signature-cell"><strong>توقيع الموظف</strong><div class="receipt-signature-line receipt-staff-signature-line">${isMonthly ? `<img src="${activeBrand.signature || 'assets/signature.svg'}" alt="التوقيع" onerror="this.style.display='none'">` : ''}</div></div>
+                <div class="receipt-signature-cell receipt-receiver-signature"><strong>${isMonthly ? 'توقيع المستأجر' : 'توقيع المستلم'}</strong><div class="receipt-signature-line"></div><small>بتوقيعي أقر بالاطلاع على الشروط أعلاه والموافقة عليها.</small></div>
+              </div>
+
+              ${invoiceDepositMovements.length && !isSingleCycleView ? `
+                <div class="receipt-deposit-movements">
+                  <h4 style="font-size: 0.9rem; font-weight: 800; color: #5b21b6; margin-bottom: 8px;">سجل حركات التأمين</h4>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
+                    <thead><tr style="background: #f5f3ff;"><th style="padding: 6px; text-align: right;">التاريخ</th><th style="padding: 6px; text-align: center;">الحركة</th><th style="padding: 6px; text-align: center;">المبلغ</th><th style="padding: 6px; text-align: center;">الطريقة</th><th style="padding: 6px; text-align: right;">السبب / الموظف</th></tr></thead>
+                    <tbody>${invoiceDepositMovements.map(m => {
+                      const labels = { collected: 'استلام', reconciled: 'مطابقة رصيد قديم', refunded: 'رد', applied: 'تسوية على الإقامة', retained: 'احتفاظ' };
+                      return `<tr style="border-bottom: 1px solid #ede9fe;"><td style="padding: 6px;"><bdi dir="ltr">${formatReceiptDateTime(m.movement_date)}</bdi></td><td style="padding: 6px; text-align: center;">${labels[m.movement_type] || escapeHtml(receiptDigits(m.movement_type))}</td><td style="padding: 6px; text-align: center;">${formatReceiptMoney(m.amount)} ر.س</td><td style="padding: 6px; text-align: center;">${escapeHtml(receiptDigits(m.payment_method || 'نقداً'))}</td><td style="padding: 6px;">${escapeHtml(receiptDigits(m.reason || ''))}${m.staff_username ? ` - ${escapeHtml(receiptDigits(m.staff_username))}` : ''}</td></tr>`;
+                    }).join('')}</tbody>
+                  </table>
+                </div>
+              ` : ''}
             </div>
-          ` : ''}
-        </div>
-      `;
+          `;
+
+          requestAnimationFrame(fitInvoicePreviewToViewport);
+        }
+      };
+
+      invoiceRenderer['render'](selectedCycleIndex);
 
       if (invoiceModal) {
         invoiceModal.style.display = 'flex';

@@ -195,6 +195,8 @@ async function init(dbPath) {
         business_date TEXT,
         user_id INTEGER,
         notes TEXT,
+        period_start_date TEXT,
+        period_end_date TEXT,
         FOREIGN KEY(reservation_id) REFERENCES reservations(id),
         FOREIGN KEY(user_id) REFERENCES users(id)
       );
@@ -350,7 +352,9 @@ async function init(dbPath) {
       { table: 'reservation_transfers', column: 'from_rate', sql: 'ALTER TABLE reservation_transfers ADD COLUMN from_rate REAL' },
       { table: 'reservation_transfers', column: 'transfer_mode', sql: "ALTER TABLE reservation_transfers ADD COLUMN transfer_mode TEXT DEFAULT 'keep_rate'" },
       { table: 'reservation_transfers', column: 'from_monthly_price', sql: 'ALTER TABLE reservation_transfers ADD COLUMN from_monthly_price REAL' },
-      { table: 'reservation_transfers', column: 'to_monthly_price', sql: 'ALTER TABLE reservation_transfers ADD COLUMN to_monthly_price REAL' }
+      { table: 'reservation_transfers', column: 'to_monthly_price', sql: 'ALTER TABLE reservation_transfers ADD COLUMN to_monthly_price REAL' },
+      { table: 'payments', column: 'period_start_date', sql: 'ALTER TABLE payments ADD COLUMN period_start_date TEXT' },
+      { table: 'payments', column: 'period_end_date', sql: 'ALTER TABLE payments ADD COLUMN period_end_date TEXT' }
     ];
     for (const migration of migrations) {
       try {

@@ -223,7 +223,7 @@
   function escapeHtml(str) { return App.Helpers.escapeHtml(str); }
   function showConfirmDialog(opts) { return App.Helpers.showConfirmDialog(opts); }
   function showPromptDialog(opts) { return App.Helpers.showPromptDialog(opts); }
-  function openInvoiceModal(id) { return window.openInvoiceModal(id); }
+  function openInvoiceModal(id, options) { return window.openInvoiceModal(id, options); }
   function openShiftAuditModal() { return window.openShiftAuditModal(); }
   function openDailyBackupModal() { return window.openDailyBackupModal(); }
   function sendReservationWhatsApp(id) { return window.sendReservationWhatsApp(id); }
@@ -3673,6 +3673,12 @@
             typeof loadTodayCheckouts === 'function' ? loadTodayCheckouts() : Promise.resolve()
           ]);
           await notifyAttentionUpdate(numResId, 'extend');
+
+          if (typeof openInvoiceModal === 'function' && (res.isMonthly || res.receiptNumber)) {
+            setTimeout(() => {
+              openInvoiceModal(numResId, { receiptNumber: res.receiptNumber || null });
+            }, 350);
+          }
         } else {
           showToast(res?.error || 'فشل تمديد الحجز.', 'error');
         }
