@@ -65,30 +65,52 @@ function readBrandingConfigFromDisk(app) {
     } catch (_) {}
   }
 
+  let baseConfig = null;
+  try {
+    if (fs.existsSync(BRANDING_FILE_PATH)) {
+      const raw = fs.readFileSync(BRANDING_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.brands && parsed.activeBrand && parsed.brands[parsed.activeBrand]) {
+        baseConfig = parsed;
+      }
+    }
+  } catch (err) {
+    console.error('[Branding] Failed to read bundled config:', err.message);
+  }
+
+  if (!baseConfig || !baseConfig.brands) {
+    baseConfig = JSON.parse(JSON.stringify(DEFAULT_BRANDING));
+  }
+
   if (userPath && fs.existsSync(userPath)) {
     try {
       const raw = fs.readFileSync(userPath, 'utf8');
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.brands && parsed.activeBrand && parsed.brands[parsed.activeBrand]) {
-        return parsed;
+      // Validate that cached activeBrand actually exists in baseConfig
+      if (parsed && parsed.activeBrand && baseConfig.brands[parsed.activeBrand]) {
+        for (const brandId of Object.keys(baseConfig.brands)) {
+          if (parsed.brands && parsed.brands[brandId]) {
+            baseConfig.brands[brandId] = Object.assign({}, baseConfig.brands[brandId], parsed.brands[brandId]);
+          }
+        }
+        baseConfig.activeBrand = parsed.activeBrand;
+        if (typeof parsed.hideBrandSwitcherInExe === 'boolean') {
+          baseConfig.hideBrandSwitcherInExe = parsed.hideBrandSwitcherInExe;
+        }
+        return baseConfig;
+      } else {
+        // Obsolete or non-existent brand cached in userData (e.g. deleted demo hotel_2)!
+        // Clean up userData file so stale cache does not linger
+        try {
+          fs.writeFileSync(userPath, JSON.stringify(baseConfig, null, 2), 'utf8');
+        } catch (_) {}
       }
     } catch (err) {
       console.warn('[Branding] Failed reading userData config:', err.message);
     }
   }
 
-  try {
-    if (fs.existsSync(BRANDING_FILE_PATH)) {
-      const raw = fs.readFileSync(BRANDING_FILE_PATH, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.brands && parsed.activeBrand && parsed.brands[parsed.activeBrand]) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.error('[Branding] Failed to read config from disk, falling back to default:', err.message);
-  }
-  return JSON.parse(JSON.stringify(DEFAULT_BRANDING));
+  return baseConfig;
 }
 
 function writeBrandingConfigToDisk(config, app) {
