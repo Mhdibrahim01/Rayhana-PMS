@@ -5,7 +5,7 @@
  * Multi-Brand / White-Label Switcher & Build Prep Tool
  *
  * Usage:
- *   node scripts/apply-brand.js <hotel_1 | hotel_2 | hotel_3>
+ *   node scripts/apply-brand.js <hotel_1 | general>
  *   node scripts/apply-brand.js --list
  */
 

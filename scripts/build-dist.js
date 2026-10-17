@@ -2,18 +2,19 @@
 'use strict';
 
 /**
- * Multi-Brand Automated Distribution & Packaging Tool
+ * Dual-Edition Automated Distribution & Packaging Tool
  *
- * Automatically builds standalone Windows .exe installers for every configured
- * hotel brand (or a specific brand) and packages them into a compressed archive (.zip / .tar.gz).
+ * Automatically builds standalone Windows .exe installers for the two core editions:
+ * 1. Rayhana Suites & Shams Al-Manazel (hotel_1)
+ * 2. General / Multi-Office Customizable ERP (general)
  *
  * Usage:
- *   npm run dist                        (Builds all hotel brands and packages into a compressed zip)
- *   npm run dist:all                    (Explicitly builds all hotel brands)
+ *   npm run dist                        (Builds the two editions: Rayhana & General)
+ *   npm run dist:all                    (Explicitly builds both editions)
  *   npm run dist:rayhana                (Builds the official Rayhana & Shams Al-Manazel edition)
  *   npm run dist:general                (Builds the customizable general office edition)
- *   npm run dist:single                 (Builds only the currently active hotel brand)
- *   node scripts/build-dist.js --brand <hotel_id> (Builds only the specified hotel brand)
+ *   npm run dist:single                 (Builds only the currently active edition)
+ *   node scripts/build-dist.js --brand <hotel_id> (Builds only the specified brand)
  */
 
 const fs = require('fs');
@@ -103,7 +104,12 @@ async function runBuildPipeline() {
   } else if (isSingle) {
     targetBrandIds = [originalActiveBrand];
   } else {
-    targetBrandIds = Object.keys(brands);
+    // Default when running `dist` or `dist:all`: build exactly the two target editions
+    const available = Object.keys(brands);
+    targetBrandIds = ['hotel_1', 'general'].filter(id => available.includes(id));
+    if (targetBrandIds.length === 0) {
+      targetBrandIds = available.slice(0, 2);
+    }
   }
 
   if (!fs.existsSync(DIST_DIR)) {
