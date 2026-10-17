@@ -1039,6 +1039,11 @@
         const positivePayments = reservationPaymentsList.filter(p => parseFloat(p.amount) > 0);
         if (positivePayments.length > 0) {
           let runningStart = inv.check_in_date ? String(inv.check_in_date).slice(0, 10) : '';
+          const initialStayGross = roundMoney(monthlyRate * initialStayMonths);
+          const initialStayNet = Math.max(0, roundMoney(storedTotal - monthlyExtensionAmount));
+          const initialStayDiscount = Math.min(discount, Math.max(0, roundMoney(initialStayGross - initialStayNet)));
+          let remainingDiscountPool = discount;
+
           positivePayments.forEach((p, idx) => {
             const pStart = (p.period_start_date ? String(p.period_start_date).slice(0, 10) : '') || runningStart;
             let pEnd = p.period_end_date ? String(p.period_end_date).slice(0, 10) : '';
@@ -1096,7 +1101,25 @@
             const cycleNames = ['الشهر الأول', 'الشهر الثاني', 'الشهر الثالث', 'الشهر الرابع', 'الشهر الخامس', 'الشهر السادس', 'الشهر السابع', 'الشهر الثامن', 'الشهر التاسع', 'الشهر العاشر', 'الشهر الحادي عشر', 'الشهر الثاني عشر'];
             const baseTitle = cycleNames[idx] || `الشهر ${idx + 1}`;
             const cycleTitle = cycleMonths > 1 ? `${baseTitle} (${cycleDurationText})` : baseTitle;
-            const cycleTotalCharge = roundMoney(monthlyRate * cycleMonths);
+            const cycleGrossCharge = roundMoney(monthlyRate * cycleMonths);
+
+            let cycleDiscount = 0;
+            if (positivePayments.length === 1) {
+              cycleDiscount = discount;
+            } else if (idx === 0) {
+              cycleDiscount = initialStayDiscount;
+              remainingDiscountPool = Math.max(0, roundMoney(remainingDiscountPool - cycleDiscount));
+            } else {
+              const extDiscMatch = String(p.notes || '').match(/\[خصم تمديد:\s*([\d.]+)\s*ر\.س\]/);
+              if (extDiscMatch) {
+                cycleDiscount = parseFloat(extDiscMatch[1]) || 0;
+              } else if (remainingDiscountPool > 0) {
+                cycleDiscount = Math.min(remainingDiscountPool, Math.max(0, roundMoney(cycleGrossCharge - pAmount)));
+              }
+              remainingDiscountPool = Math.max(0, roundMoney(remainingDiscountPool - cycleDiscount));
+            }
+
+            const cycleTotalCharge = Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
 
             monthlyCycles.push({
               index: idx,
@@ -1109,6 +1132,8 @@
               rate: monthlyRate,
               monthsCount: cycleMonths,
               durationText: cycleDurationText,
+              grossCharge: cycleGrossCharge,
+              discount: cycleDiscount,
               totalCharge: cycleTotalCharge,
               paymentMethod: p.payment_method || inv.payment_method || '',
               user: p.username || ''
@@ -1136,6 +1161,10 @@
           else if (initMonths >= 3 && initMonths <= 10) initDurationText = `${initMonths} أشهر`;
           else if (initMonths > 10) initDurationText = `${initMonths} شهراً`;
 
+          const cycleGrossCharge = roundMoney(monthlyRate * initMonths);
+          const cycleDiscount = discount;
+          const cycleTotalCharge = Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
+
           monthlyCycles.push({
             index: 0,
             title: initMonths > 1 ? `الشهر الأول (${initDurationText})` : 'الشهر الأول',
@@ -1147,7 +1176,9 @@
             rate: monthlyRate,
             monthsCount: initMonths,
             durationText: initDurationText,
-            totalCharge: roundMoney(monthlyRate * initMonths),
+            grossCharge: cycleGrossCharge,
+            discount: cycleDiscount,
+            totalCharge: cycleTotalCharge,
             paymentMethod: inv.payment_method || '',
             user: ''
           });
@@ -1252,7 +1283,11 @@
             }
             const cyclePaid = currentCycle.amount;
             const cycleRate = currentCycle.rate;
-            const cycleTotalCharge = currentCycle.totalCharge || roundMoney(cycleRate * (currentCycle.monthsCount || 1));
+            const cycleGrossCharge = currentCycle.grossCharge || roundMoney(cycleRate * (currentCycle.monthsCount || 1));
+            const cycleDiscount = currentCycle.discount || 0;
+            const cycleTotalCharge = currentCycle.totalCharge !== undefined
+              ? currentCycle.totalCharge
+              : Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
             const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cyclePaid));
             const cycleStatusBadge = cycleRemaining <= 0.005 ? '\u0645\u062f\u0641\u0648\u0639\u0020\u0628\u0627\u0644\u0643\u0627\u0645\u0644' : (cyclePaid > 0 ? '\u0645\u062f\u0641\u0648\u0639\u0020\u062c\u0632\u0626\u064a\u0627\u064b' : '\u063a\u064a\u0631\u0020\u0645\u062f\u0641\u0648\u0639');
             displayPaymentBadgeHtml = window.DashboardApp.Helpers.getPaymentStatusBadge(cycleStatusBadge);
@@ -1268,7 +1303,11 @@
           if (isSingleCycleView && currentCycle) {
             const cycleRate = currentCycle.rate;
             const cyclePaid = currentCycle.amount;
-            const cycleTotalCharge = currentCycle.totalCharge || roundMoney(cycleRate * (currentCycle.monthsCount || 1));
+            const cycleGrossCharge = currentCycle.grossCharge || roundMoney(cycleRate * (currentCycle.monthsCount || 1));
+            const cycleDiscount = currentCycle.discount || 0;
+            const cycleTotalCharge = currentCycle.totalCharge !== undefined
+              ? currentCycle.totalCharge
+              : Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
             const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cyclePaid));
 
             itemsTableRowsHtml = `
@@ -1281,8 +1320,19 @@
                 </td>
                 <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cycleRate)} ر.س</td>
                 <td style="padding: 14px; text-align: center; font-weight: 700; color: #475569;">${currentCycle.durationText || 'شهر'}</td>
-                <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cycleTotalCharge)} ر.س</td>
+                <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cycleGrossCharge)} ر.س</td>
               </tr>
+              ${cycleDiscount > 0 ? `
+                <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 12px 14px;">
+                    <div style="font-weight: 700; color: #334155;">خصم وتخفيض معتمد${discountReasonText}</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">تخفيض ممنوح على إجمالي قيمة الإقامة</div>
+                  </td>
+                  <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
+                  <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
+                  <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #334155;" dir="ltr">- ${formatReceiptMoney(cycleDiscount)} ر.س</td>
+                </tr>
+              ` : ''}
               ${deposit > 0 ? `
                 <tr style="background: #fdf4ff; border-bottom: 1px solid #fae8ff;">
                   <td style="padding: 12px 14px;">
@@ -1298,6 +1348,16 @@
 
             totalsCardHtml = `
               <div class="receipt-totals-card">
+                ${cycleDiscount > 0 ? `
+                  <div class="receipt-total-line">
+                    <span>المجموع قبل الخصم:</span>
+                    <span dir="ltr">${formatReceiptMoney(cycleGrossCharge)} ر.س</span>
+                  </div>
+                  <div class="receipt-total-line receipt-total-discount">
+                    <span>الخصم المعتمد:</span>
+                    <span dir="ltr">- ${formatReceiptMoney(cycleDiscount)} ر.س</span>
+                  </div>
+                ` : ''}
                 <div class="receipt-total-line receipt-total-net">
                   <span>الإجمالي الصافي:</span>
                   <span dir="ltr">${formatReceiptMoney(cycleTotalCharge)} ر.س</span>
@@ -1329,7 +1389,7 @@
                   </td>
                   <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cyc.rate)} ر.س</td>
                   <td style="padding: 14px; text-align: center; font-weight: 700; color: #475569;">${cyc.durationText || 'شهر'}</td>
-                  <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cyc.totalCharge || cyc.rate)} ر.س</td>
+                  <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cyc.grossCharge || cyc.totalCharge || cyc.rate)} ر.س</td>
                 </tr>
               `).join('');
 

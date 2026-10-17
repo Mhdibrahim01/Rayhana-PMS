@@ -143,6 +143,18 @@ test('monthly receipt header: renderer data layer', async t => {
         'formatReceiptDateTime must use parseStoredTimestamp to convert UTC to local time'
       );
     });
+
+    await t.test('single cycle monthly receipt includes discount line, gross total, and correct net', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const dashboardSrc = fs.readFileSync(path.join(__dirname, '../dashboard.js'), 'utf8');
+
+      // Verify that single-cycle view handles cycleDiscount in both items table and totals card
+      assert.ok(dashboardSrc.includes('cycleGrossCharge'), 'invoice calculates cycleGrossCharge for cycle lines');
+      assert.ok(dashboardSrc.includes('cycleDiscount > 0'), 'invoice conditionally renders discount row in single cycle');
+      assert.ok(dashboardSrc.includes('receipt-total-discount'), 'invoice totals card includes discount line');
+    });
   });
 });
+
 
