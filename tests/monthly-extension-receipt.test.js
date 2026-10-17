@@ -203,5 +203,76 @@ test('monthly extension receipts: independent receipt cycle & clean accounting',
       assert.equal(contract.contractValue, monthlyRate * 3, 'Contract value after extension must be 13500');
       assertDatabaseIntegrity(connection, 'multi-month extension integrity');
     });
+
+    await t.test('multi-month extension (+6 months) stamps correct period, cost, and calculates 6-month receipt cycle', () => {
+      const room = addRoom('MREC-105', 150);
+      const start1 = today;
+      const end1 = getTestCalendarMonthCheckOut(start1, 1);
+      const end2 = getTestCalendarMonthCheckOut(end1, 1);
+      const end3 = getTestCalendarMonthCheckOut(end2, 6);
+
+      // Month 1
+      const resId = createReservation({
+        roomId: room.id,
+        checkIn: start1,
+        checkOut: end1,
+        totalPrice: monthlyRate,
+        paidAmount: monthlyRate,
+        bookingType: 'حجز شهري',
+        monthlyPrice: monthlyRate,
+        monthsCount: 1
+      });
+
+      // Month 2 extension (+1 month)
+      const ext1 = appDb.extendReservation({
+        reservationId: resId,
+        newCheckOutDate: end2,
+        settleAmount: monthlyRate,
+        paymentMethod: 'مدى',
+        notes: 'تمديد شهر ثاني'
+      });
+      assert.ok(ext1.success);
+
+      // Month 3 to 8 extension (+6 months)
+      const ext2 = appDb.extendReservation({
+        reservationId: resId,
+        newCheckOutDate: end3,
+        settleAmount: monthlyRate * 6,
+        paymentMethod: 'مدى',
+        notes: 'تمديد ستة أشهر تقويمية'
+      });
+      assert.ok(ext2.success, '6-month extension must succeed');
+      assert.equal(ext2.additionalCost, 27000, 'Extension cost for 6 months is 27,000 SAR');
+      assert.equal(ext2.cycleCost, 27000);
+
+      const payments = appDb.getReservationPayments(resId);
+      assert.equal(payments.length, 3, 'Must have 3 payment records');
+
+      const p3 = payments[2];
+      assert.equal(p3.amount, 27000);
+      assert.equal(p3.period_start_date, end2);
+      assert.equal(p3.period_end_date, end3);
+
+      // Verify dashboard monthly cycles computation
+      const [sy, sm, sd] = p3.period_start_date.split('-').map(Number);
+      let calculatedMonths = 1;
+      for (let m = 1; m <= 36; m++) {
+        const lastDay = new Date(sy, sm + m, 0).getDate();
+        const clamped = Math.min(sd, lastDay);
+        const tgt = new Date(sy, sm - 1 + m, 1);
+        const expEnd = `${tgt.getFullYear()}-${String(tgt.getMonth() + 1).padStart(2, '0')}-${String(clamped).padStart(2, '0')}`;
+        if (p3.period_end_date === expEnd) {
+          calculatedMonths = m;
+          break;
+        }
+      }
+      assert.equal(calculatedMonths, 6, 'Cycle duration must be exactly 6 months');
+      const cycleTotalCharge = monthlyRate * calculatedMonths;
+      assert.equal(cycleTotalCharge, 27000, 'Cycle total charge must be 27,000 SAR');
+      const cycleRemaining = Math.max(0, cycleTotalCharge - p3.amount);
+      assert.equal(cycleRemaining, 0, 'Remaining must be 0 for paid in full 6-month extension');
+
+      assertDatabaseIntegrity(connection, 'multi-month 6-month extension integrity');
+    });
   });
 });
