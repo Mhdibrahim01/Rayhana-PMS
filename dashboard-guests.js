@@ -69,6 +69,7 @@
           <td style="font-weight: 800; color: #1e293b; font-size: 0.9rem;">
             ${App.Helpers.escapeHtml(g.name)}
           </td>
+          <td style="color: var(--text-secondary); font-weight: 600;">${App.Helpers.escapeHtml(g.nationality || 'سعودي')}</td>
           <td style="font-family: monospace; color: var(--text-secondary);">${App.Helpers.escapeHtml(g.phone || '-')}</td>
           <td style="color: var(--text-secondary);">${App.Helpers.escapeHtml(g.id_number || '-')}</td>
           <td>
@@ -140,6 +141,7 @@
 
     if (App.DOM.editGuestId) App.DOM.editGuestId.value = guest.id;
     if (App.DOM.editGuestName) App.DOM.editGuestName.value = guest.name || '';
+    if (App.DOM.editGuestNationality) App.DOM.editGuestNationality.value = guest.nationality || 'سعودي';
     if (App.DOM.editGuestPhone) App.DOM.editGuestPhone.value = guest.phone || '';
     if (App.DOM.editGuestIdNumber) App.DOM.editGuestIdNumber.value = guest.id_number || '';
 
@@ -370,6 +372,7 @@
       e.preventDefault();
       const guestId = parseInt(App.DOM.editGuestId.value, 10);
       const name = App.DOM.editGuestName.value.trim();
+      const nationality = (App.DOM.editGuestNationality ? App.DOM.editGuestNationality.value : '').trim() || 'سعودي';
       const phone = App.DOM.editGuestPhone.value.trim();
       const id_number = App.DOM.editGuestIdNumber.value.trim();
 
@@ -384,7 +387,7 @@
           App.DOM.btnSaveEditGuest.textContent = 'جاري الحفظ...';
         }
 
-        const res = await window.api.updateGuest({ guestId, name, phone, id_number });
+        const res = await window.api.updateGuest({ guestId, name, phone, id_number, nationality });
         if (res && res.success) {
           App.Helpers.showToast('تم تحديث بيانات النزيل بنجاح! ✓', 'success');
           closeEditGuestModal();
@@ -426,6 +429,7 @@
       const exportRows = allGuestsList.map(g => ({
         'معرف النزيل': g.id,
         'اسم النزيل': g.name,
+        'الجنسية': g.nationality || 'سعودي',
         'رقم الجوال': g.phone || '',
         'رقم الهوية / الجواز': g.id_number || '',
         'عدد الإقامات المكتملة': parseInt(g.total_stays, 10) || 0,
@@ -437,7 +441,7 @@
       const ws = XLSX.utils.json_to_sheet(exportRows);
 
       ws['!cols'] = [
-        { wch: 12 }, { wch: 28 }, { wch: 18 }, { wch: 20 },
+        { wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 20 },
         { wch: 14 }, { wch: 18 }, { wch: 20 }
       ];
 

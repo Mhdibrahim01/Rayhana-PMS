@@ -157,6 +157,7 @@
   const editInvoiceForm = document.getElementById('edit-invoice-form');
   const editInvResId = document.getElementById('edit-inv-res-id');
   const editInvGuestName = document.getElementById('edit-inv-guest-name');
+  const editInvGuestNationality = document.getElementById('edit-inv-guest-nationality');
   const editInvGuestPhone = document.getElementById('edit-inv-guest-phone');
   const editInvGuestId = document.getElementById('edit-inv-guest-id');
   const editInvTotalPrice = document.getElementById('edit-inv-total-price');
@@ -172,6 +173,7 @@
   const editGuestForm = document.getElementById('edit-guest-form');
   const editGuestId = document.getElementById('edit-guest-id');
   const editGuestName = document.getElementById('edit-guest-name');
+  const editGuestNationality = document.getElementById('edit-guest-nationality');
   const editGuestPhone = document.getElementById('edit-guest-phone');
   const editGuestIdNumber = document.getElementById('edit-guest-id-number');
   const btnSaveEditGuest = document.getElementById('btn-save-edit-guest');
@@ -1613,6 +1615,7 @@
                   <h3 style="font-size: 0.95rem; font-weight: 800; color: #1e293b; margin: 0 0 12px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">بيانات النزيل (Guest Details)</h3>
                   <div style="font-size: 0.85rem; line-height: 1.8; color: #475569;">
                     <div><strong style="color: #1e293b;">اسم النزيل:</strong> ${escapeHtml(receiptDigits(inv.guest_name))}</div>
+                    <div><strong style="color: #1e293b;">الجنسية:</strong> ${escapeHtml(receiptDigits(inv.guest_nationality || 'سعودي'))}</div>
                     <div><strong style="color: #1e293b;">رقم الجوال:</strong> ${escapeHtml(receiptDigits(inv.guest_phone || '-'))}</div>
                     <div><strong style="color: #1e293b;">رقم الهوية / الإقامة:</strong> ${escapeHtml(receiptDigits(inv.guest_id_number || 'غير مسجل'))}</div>
                   </div>
@@ -1631,6 +1634,24 @@
                   </div>
                 </div>
               </div>
+
+              ${(inv.companions && inv.companions.length > 0) ? `
+                <div class="receipt-companions-card" style="margin-bottom: 20px; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                  <div style="font-weight: 800; color: #1e1b4b; font-size: 0.85rem; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                    <span>👥 المرافقون المسجلون بالوحدة (${inv.companions.length}):</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    ${inv.companions.map(c => `
+                      <span style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; color: #334155;">
+                        <strong>${escapeHtml(receiptDigits(c.name))}</strong>
+                        ${c.relationship ? `<span style="color: #64748b;">(${escapeHtml(receiptDigits(c.relationship))})</span>` : ''}
+                        ${c.nationality ? `<span style="color: #0369a1; font-size: 0.74rem; background: #e0f2fe; padding: 1px 5px; border-radius: 4px;">${escapeHtml(receiptDigits(c.nationality))}</span>` : ''}
+                        ${c.id_number ? `<span style="color: #64748b; font-family: monospace; font-size: 0.76rem;">- ${escapeHtml(receiptDigits(c.id_number))}</span>` : ''}
+                      </span>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
 
               <!-- Items Table -->
               <div class="receipt-items-wrap" style="margin-bottom: 28px; overflow-x: auto;">
@@ -2612,6 +2633,7 @@
       }
       if (editInvResId) editInvResId.value = currentInvoiceData.id;
       if (editInvGuestName) editInvGuestName.value = currentInvoiceData.guest_name || '';
+      if (editInvGuestNationality) editInvGuestNationality.value = currentInvoiceData.guest_nationality || 'سعودي';
       if (editInvGuestPhone) editInvGuestPhone.value = currentInvoiceData.guest_phone || '';
       if (editInvGuestId) editInvGuestId.value = currentInvoiceData.guest_id_number || '';
       if (editInvTotalPrice) editInvTotalPrice.value = currentInvoiceData.total_price || 0;
@@ -2641,6 +2663,7 @@
       e.preventDefault();
       const resId = parseInt(editInvResId.value, 10);
       const guestName = editInvGuestName.value.trim();
+      const guestNationality = editInvGuestNationality ? (editInvGuestNationality.value.trim() || 'سعودي') : 'سعودي';
       const guestPhone = editInvGuestPhone.value.trim();
       const guestIdNumber = editInvGuestId.value.trim();
       const totalPrice = parseFloat(editInvTotalPrice.value) || 0;
@@ -2684,6 +2707,7 @@
           guestName,
           guestPhone,
           guestIdNumber,
+          guestNationality,
           totalPrice,
           paidAmount,
           depositAmount,
@@ -3518,6 +3542,7 @@
     window.DashboardApp.DOM.editGuestForm = editGuestForm;
     window.DashboardApp.DOM.editGuestId = editGuestId;
     window.DashboardApp.DOM.editGuestName = editGuestName;
+    window.DashboardApp.DOM.editGuestNationality = editGuestNationality;
     window.DashboardApp.DOM.editGuestPhone = editGuestPhone;
     window.DashboardApp.DOM.editGuestIdNumber = editGuestIdNumber;
     window.DashboardApp.DOM.btnSaveEditGuest = btnSaveEditGuest;

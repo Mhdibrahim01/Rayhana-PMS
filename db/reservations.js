@@ -115,6 +115,8 @@ const RESERVATION_LIST_SQL = `
     g.name AS guest_name,
     g.phone AS guest_phone,
     g.id_number AS guest_id_number,
+    g.nationality AS guest_nationality,
+    (SELECT COUNT(*) FROM reservation_companions rc WHERE rc.reservation_id = r.id) AS companions_count,
     rm.room_number,
     rm.type AS room_type,
     rm.price_per_night,
@@ -216,8 +218,10 @@ function buildReservationListFilter({ search = '', status = 'all', paymentType =
       OR CAST(COALESCE(rm.room_number, '') AS TEXT) LIKE ? ESCAPE '\\'
       OR COALESCE(g.phone, '') LIKE ? ESCAPE '\\'
       OR COALESCE(g.id_number, '') LIKE ? ESCAPE '\\'
+      OR COALESCE(g.nationality, '') LIKE ? ESCAPE '\\'
+      OR EXISTS (SELECT 1 FROM reservation_companions rc WHERE rc.reservation_id = r.id AND (rc.name LIKE ? ESCAPE '\\' OR rc.id_number LIKE ? ESCAPE '\\'))
     )`);
-    params.push(like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like, like);
   }
 
   return {
@@ -378,6 +382,7 @@ function getReservationById(reservationId) {
       g.name AS guest_name, 
       g.phone AS guest_phone, 
       g.id_number AS guest_id_number,
+      g.nationality AS guest_nationality,
       rm.room_number, 
       rm.type AS room_type, 
       rm.price_per_night,
@@ -389,6 +394,7 @@ function getReservationById(reservationId) {
   `;
   const res = queryOne(sql, [parseInt(reservationId, 10)]);
   if (res) {
+    res.companions = getReservationCompanions(res.id);
     res.transfers = queryAll(`
       SELECT t.id, t.from_room_id, t.to_room_id, t.segment_start_date, t.segment_end_date,
              t.segment_nights, t.pinned_rate, t.from_rate, t.segment_revenue, t.transfer_mode,
@@ -422,6 +428,9 @@ function createReservation({
   guestName,
   guestPhone,
   guestIdNumber,
+  guestNationality = 'سعودي',
+  guest_nationality,
+  companions = [],
   roomId,
   checkInDate,
   checkOutDate,
@@ -672,18 +681,23 @@ function createReservation({
 
     let guest = null;
     if (guestIdNumber) {
-      guest = queryOne("SELECT id FROM guests WHERE id_number = ?", [guestIdNumber.trim()]);
+      guest = queryOne("SELECT id, nationality FROM guests WHERE id_number = ?", [guestIdNumber.trim()]);
     }
     if (!guest && guestPhone) {
-      guest = queryOne("SELECT id FROM guests WHERE phone = ?", [guestPhone.trim()]);
+      guest = queryOne("SELECT id, nationality FROM guests WHERE phone = ?", [guestPhone.trim()]);
     }
+
+    const cleanNationality = (guestNationality || guest_nationality || 'سعودي').trim() || 'سعودي';
 
     let guestId;
     if (guest) {
       guestId = guest.id;
+      if (cleanNationality && cleanNationality !== guest.nationality) {
+        db.run("UPDATE guests SET nationality = ? WHERE id = ?", [cleanNationality, guest.id]);
+      }
     } else {
-      const guestStmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
-      guestStmt.run([guestName.trim(), cleanPhone, cleanId]);
+      const guestStmt = db.prepare("INSERT INTO guests (name, phone, id_number, nationality) VALUES (?, ?, ?, ?)");
+      guestStmt.run([guestName.trim(), cleanPhone, cleanId, cleanNationality]);
       guestStmt.free();
       const newGuest = queryOne("SELECT id FROM guests ORDER BY id DESC LIMIT 1");
       guestId = newGuest.id;
@@ -743,6 +757,27 @@ function createReservation({
 
     const createdRes = queryOne("SELECT id FROM reservations ORDER BY id DESC LIMIT 1");
     const newReservationId = createdRes.id;
+
+    if (Array.isArray(companions) && companions.length > 0) {
+      const compStmt = db.prepare(`
+        INSERT INTO reservation_companions (
+          reservation_id, name, id_number, nationality, relationship, phone
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      for (const comp of companions) {
+        if (comp && comp.name && String(comp.name).trim()) {
+          compStmt.run([
+            newReservationId,
+            String(comp.name).trim(),
+            (comp.id_number || '').trim(),
+            (comp.nationality || 'سعودي').trim() || 'سعودي',
+            (comp.relationship || '').trim(),
+            (comp.phone || '').trim()
+          ]);
+        }
+      }
+      compStmt.free();
+    }
 
     if (overrideBan) {
       const auditUser = overrideUsername || (userId ? `مستخدم #${userId}` : 'الموظف');
@@ -2538,6 +2573,8 @@ function updateReservationReceipt({
   guestName,
   guestPhone,
   guestIdNumber,
+  guestNationality,
+  guest_nationality,
   discountAmount,
   discountReason,
   customNightlyPrice,
@@ -2700,26 +2737,28 @@ function updateReservationReceipt({
 
     // 3. Update guest information if changed
     if (res.guest_id) {
-      const currentGuest = queryOne("SELECT name, phone, id_number FROM guests WHERE id = ?", [res.guest_id]);
+      const currentGuest = queryOne("SELECT name, phone, id_number, nationality FROM guests WHERE id = ?", [res.guest_id]);
       if (currentGuest) {
         const newName = (guestName && guestName.trim()) ? guestName.trim() : currentGuest.name;
         const newPhone = cleanPhone || currentGuest.phone;
         const newId = cleanId || currentGuest.id_number;
-        const guestChanged = newName !== currentGuest.name || newPhone !== currentGuest.phone || newId !== currentGuest.id_number;
+        const rawNat = (guestNationality || guest_nationality);
+        const newNat = (rawNat !== undefined && rawNat !== null && String(rawNat).trim()) ? String(rawNat).trim() : (currentGuest.nationality || 'سعودي');
+        const guestChanged = newName !== currentGuest.name || newPhone !== currentGuest.phone || newId !== currentGuest.id_number || newNat !== currentGuest.nationality;
         if (guestChanged) {
           const usageCount = queryOne("SELECT COUNT(*) AS count FROM reservations WHERE guest_id = ?", [res.guest_id])?.count || 0;
           if (usageCount > 1) {
             // Fork guest record for this reservation so older reservations maintain historical integrity
-            const newGuestStmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
-            newGuestStmt.run([newName, newPhone, newId]);
+            const newGuestStmt = db.prepare("INSERT INTO guests (name, phone, id_number, nationality) VALUES (?, ?, ?, ?)");
+            newGuestStmt.run([newName, newPhone, newId, newNat]);
             newGuestStmt.free();
             const newGuestId = queryOne("SELECT last_insert_rowid() AS id").id;
             const updateResGuest = db.prepare("UPDATE reservations SET guest_id = ? WHERE id = ?");
             updateResGuest.run([newGuestId, targetId]);
             updateResGuest.free();
           } else {
-            const updateGuestStmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ? WHERE id = ?");
-            updateGuestStmt.run([newName, newPhone, newId, res.guest_id]);
+            const updateGuestStmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ?, nationality = ? WHERE id = ?");
+            updateGuestStmt.run([newName, newPhone, newId, newNat, res.guest_id]);
             updateGuestStmt.free();
           }
         }
@@ -3385,6 +3424,130 @@ function executeRoomTransfer({
   };
 }
 
+/**
+ * Reservation Companions Management
+ */
+function getReservationCompanions(reservationId) {
+  const targetId = parseInt(reservationId, 10);
+  if (!targetId || isNaN(targetId)) return [];
+  return queryAll(`
+    SELECT id, reservation_id, name, id_number, nationality, relationship, phone, created_at
+    FROM reservation_companions
+    WHERE reservation_id = ?
+    ORDER BY id ASC
+  `, [targetId]);
+}
+
+function addReservationCompanion(arg1, arg2) {
+  let reservationId;
+  let companionData;
+  if (typeof arg1 === 'object' && arg1 !== null && arg1.reservationId !== undefined) {
+    reservationId = arg1.reservationId;
+    companionData = arg1;
+  } else {
+    reservationId = arg1;
+    companionData = arg2 || {};
+  }
+
+  const { name, id_number = '', nationality = 'سعودي', relationship = '', phone = '' } = companionData;
+  const targetId = parseInt(reservationId, 10);
+  if (!targetId || isNaN(targetId)) throw new Error('معرف الحجز غير صالح.');
+
+  const res = queryOne("SELECT id FROM reservations WHERE id = ?", [targetId]);
+  if (!res) throw new Error('الحجز غير موجود.');
+
+  if (!name || !name.trim()) throw new Error('اسم المرافق مطلوب ولا يمكن تركه فارغاً.');
+
+  const cleanName = name.trim();
+  const cleanId = (id_number || '').trim();
+  const cleanNat = (nationality || 'سعودي').trim() || 'سعودي';
+  const cleanRel = (relationship || '').trim();
+  const cleanPhone = (phone || '').trim();
+
+  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
+    throw new Error('رقم جوال المرافق غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.');
+  }
+  if (cleanId && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(cleanId)) {
+    throw new Error('رقم هوية المرافق (10 أرقام) أو جواز السفر (6 إلى 9 خانات) غير صحيح.');
+  }
+
+  const stmt = db.prepare(`
+    INSERT INTO reservation_companions (
+      reservation_id, name, id_number, nationality, relationship, phone
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run([targetId, cleanName, cleanId, cleanNat, cleanRel, cleanPhone]);
+  stmt.free();
+  saveToFile();
+
+  return queryOne("SELECT * FROM reservation_companions ORDER BY id DESC LIMIT 1");
+}
+
+function updateReservationCompanion(arg1, arg2) {
+  let companionId;
+  let companionData;
+  if (typeof arg1 === 'object' && arg1 !== null && (arg1.companionId !== undefined || arg1.id !== undefined)) {
+    companionId = arg1.companionId !== undefined ? arg1.companionId : arg1.id;
+    companionData = arg1;
+  } else {
+    companionId = arg1;
+    companionData = arg2 || {};
+  }
+
+  const { name, id_number = '', nationality = 'سعودي', relationship = '', phone = '' } = companionData;
+  const targetId = parseInt(companionId, 10);
+  if (!targetId || isNaN(targetId)) throw new Error('معرف المرافق غير صالح.');
+
+  const existing = queryOne("SELECT id FROM reservation_companions WHERE id = ?", [targetId]);
+  if (!existing) throw new Error('سجل المرافق غير موجود.');
+
+  if (!name || !name.trim()) throw new Error('اسم المرافق مطلوب ولا يمكن تركه فارغاً.');
+
+  const cleanName = name.trim();
+  const cleanId = (id_number || '').trim();
+  const cleanNat = (nationality || 'سعودي').trim() || 'سعودي';
+  const cleanRel = (relationship || '').trim();
+  const cleanPhone = (phone || '').trim();
+
+  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
+    throw new Error('رقم جوال المرافق غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.');
+  }
+  if (cleanId && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(cleanId)) {
+    throw new Error('رقم هوية المرافق (10 أرقام) أو جواز السفر (6 إلى 9 خانات) غير صحيح.');
+  }
+
+  const stmt = db.prepare(`
+    UPDATE reservation_companions
+    SET name = ?, id_number = ?, nationality = ?, relationship = ?, phone = ?
+    WHERE id = ?
+  `);
+  stmt.run([cleanName, cleanId, cleanNat, cleanRel, cleanPhone, targetId]);
+  stmt.free();
+  saveToFile();
+
+  return queryOne("SELECT * FROM reservation_companions WHERE id = ?", [targetId]);
+}
+
+function deleteReservationCompanion(arg1) {
+  let companionId;
+  if (typeof arg1 === 'object' && arg1 !== null && (arg1.companionId !== undefined || arg1.id !== undefined)) {
+    companionId = arg1.companionId !== undefined ? arg1.companionId : arg1.id;
+  } else {
+    companionId = arg1;
+  }
+
+  const targetId = parseInt(companionId, 10);
+  if (!targetId || isNaN(targetId)) throw new Error('معرف المرافق غير صالح.');
+
+  const existing = queryOne("SELECT id, reservation_id FROM reservation_companions WHERE id = ?", [targetId]);
+  if (!existing) throw new Error('سجل المرافق غير موجود.');
+
+  db.run("DELETE FROM reservation_companions WHERE id = ?", [targetId]);
+  saveToFile();
+
+  return { success: true, reservationId: existing.reservation_id, deleted: true };
+}
+
 module.exports = {
   getAllReservations,
   getReservationsPage,
@@ -3409,5 +3572,9 @@ module.exports = {
   previewRoomTransfer,
   executeRoomTransfer,
   validateTransferEligibility,
-  computeStaySegments
+  computeStaySegments,
+  getReservationCompanions,
+  addReservationCompanion,
+  updateReservationCompanion,
+  deleteReservationCompanion
 };

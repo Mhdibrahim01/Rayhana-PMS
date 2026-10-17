@@ -65,6 +65,10 @@ contextBridge.exposeInMainWorld('api', {
   getTransferEligibleRooms: (reservationId) => ipcRenderer.invoke('reservations:get-transfer-eligible-rooms', reservationId),
   previewRoomTransfer: (data) => ipcRenderer.invoke('reservations:transfer-preview', data),
   transferRoom: (data) => ipcRenderer.invoke('reservations:transfer-room', data),
+  getReservationCompanions: (reservationId) => ipcRenderer.invoke('reservations:get-companions', reservationId),
+  addReservationCompanion: (reservationId, companion) => ipcRenderer.invoke('reservations:add-companion', { reservationId, companion }),
+  updateReservationCompanion: (companionId, companion) => ipcRenderer.invoke('reservations:update-companion', { companionId, companion }),
+  deleteReservationCompanion: (companionId) => ipcRenderer.invoke('reservations:delete-companion', companionId),
   autoUpdateRoomStatuses: () => ipcRenderer.invoke('rooms:auto-update-status'),
 
   // Guests & Customers

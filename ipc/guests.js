@@ -176,12 +176,12 @@ module.exports = function registerGuestsIpc(ipcMain, { db, session }) {
     }
   });
 
-  ipcMain.handle('guests:update', async (event, { guestId, name, phone, id_number }) => {
+  ipcMain.handle('guests:update', async (event, { guestId, name, phone, id_number, nationality }) => {
     if (!session.currentUser) {
       return { success: false, error: 'غير مصرح: يرجى تسجيل الدخول أولاً.' };
     }
     try {
-      const result = db.updateGuest(guestId, { name, phone, id_number });
+      const result = db.updateGuest(guestId, { name, phone, id_number, nationality });
       return result;
     } catch (err) {
       return { success: false, error: err.message };

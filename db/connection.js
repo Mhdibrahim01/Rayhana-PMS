@@ -42,6 +42,8 @@ function saveToFile() {
 
   try {
     const data = db.export();
+    // sql.js db.export() resets SQLite runtime connection PRAGMAs. Re-enable foreign keys immediately:
+    db.run("PRAGMA foreign_keys = ON;");
     const buffer = Buffer.from(data);
     fs.writeFileSync(tempPath, buffer);
 
@@ -118,6 +120,7 @@ async function init(dbPath) {
       db = new SQL.Database();
       console.log('[DB] تم إنشاء قاعدة بيانات SQLite جديدة في:', dbPath);
     }
+    db.run("PRAGMA foreign_keys = ON;");
 
     // 1. Create Tables
     db.run(`
@@ -136,6 +139,7 @@ async function init(dbPath) {
         name TEXT NOT NULL,
         phone TEXT,
         id_number TEXT,
+        nationality TEXT DEFAULT 'سعودي',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -305,6 +309,20 @@ async function init(dbPath) {
       CREATE INDEX IF NOT EXISTS idx_reservation_transfers_from ON reservation_transfers(from_room_id);
       CREATE INDEX IF NOT EXISTS idx_reservation_transfers_to ON reservation_transfers(to_room_id);
       CREATE INDEX IF NOT EXISTS idx_reservation_transfers_date ON reservation_transfers(transfer_business_date);
+
+      -- جدول مرافقين الحجز (Reservation Companions)
+      CREATE TABLE IF NOT EXISTS reservation_companions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reservation_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        id_number TEXT,
+        nationality TEXT DEFAULT 'سعودي',
+        relationship TEXT,
+        phone TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(reservation_id) REFERENCES reservations(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_reservation_companions_res ON reservation_companions(reservation_id);
     `);
 
     // Enable foreign key enforcement (SQLite has it OFF by default)
@@ -356,7 +374,8 @@ async function init(dbPath) {
       { table: 'reservation_transfers', column: 'to_monthly_price', sql: 'ALTER TABLE reservation_transfers ADD COLUMN to_monthly_price REAL' },
       { table: 'payments', column: 'period_start_date', sql: 'ALTER TABLE payments ADD COLUMN period_start_date TEXT' },
       { table: 'payments', column: 'period_end_date', sql: 'ALTER TABLE payments ADD COLUMN period_end_date TEXT' },
-      { table: 'reservations', column: 'monthly_months_count', sql: 'ALTER TABLE reservations ADD COLUMN monthly_months_count INTEGER DEFAULT 1' }
+      { table: 'reservations', column: 'monthly_months_count', sql: 'ALTER TABLE reservations ADD COLUMN monthly_months_count INTEGER DEFAULT 1' },
+      { table: 'guests', column: 'nationality', sql: "ALTER TABLE guests ADD COLUMN nationality TEXT DEFAULT 'سعودي'" }
     ];
     for (const migration of migrations) {
       try {

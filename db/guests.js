@@ -15,6 +15,7 @@ function getAllGuests() {
       g.name, 
       g.phone, 
       g.id_number, 
+      g.nationality,
       g.created_at,
       g.is_banned,
       g.ban_reason,
@@ -51,10 +52,10 @@ function getGuestsPaginated({ page = 1, limit = 50, search = '', banFilter = 'al
   let countParams = [];
 
   if (cleanSearch) {
-    conditions.push('(g.name LIKE ? OR g.phone LIKE ? OR g.id_number LIKE ?)');
+    conditions.push('(g.name LIKE ? OR g.phone LIKE ? OR g.id_number LIKE ? OR g.nationality LIKE ?)');
     const wildcard = `%${cleanSearch}%`;
-    queryParams.push(wildcard, wildcard, wildcard);
-    countParams.push(wildcard, wildcard, wildcard);
+    queryParams.push(wildcard, wildcard, wildcard, wildcard);
+    countParams.push(wildcard, wildcard, wildcard, wildcard);
   }
 
   // Ban-status filter: only add a clause when not 'all' — existing callers
@@ -80,6 +81,7 @@ function getGuestsPaginated({ page = 1, limit = 50, search = '', banFilter = 'al
       g.name, 
       g.phone, 
       g.id_number, 
+      g.nationality,
       g.created_at,
       g.is_banned,
       g.ban_reason,
@@ -141,7 +143,7 @@ function getGuestReservationHistory(guestId) {
  * Add a new guest / customer directly.
  * Accessible to both 'Admin' and 'User' roles.
  */
-function addCustomer({ name, phone = '', id_number = '' }) {
+function addCustomer({ name, phone = '', id_number = '', nationality = 'سعودي' }) {
   if (!name || !name.trim()) {
     throw new Error('يرجى إدخال اسم العميل / النزيل.');
   }
@@ -149,6 +151,7 @@ function addCustomer({ name, phone = '', id_number = '' }) {
   const cleanName = name.trim();
   const cleanPhone = (phone || '').trim();
   const cleanId = (id_number || '').trim();
+  const cleanNationality = (nationality || 'سعودي').trim() || 'سعودي';
 
   if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
     throw new Error('رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).');
@@ -165,8 +168,8 @@ function addCustomer({ name, phone = '', id_number = '' }) {
     }
   }
 
-  const stmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
-  stmt.run([cleanName, cleanPhone, cleanId]);
+  const stmt = db.prepare("INSERT INTO guests (name, phone, id_number, nationality) VALUES (?, ?, ?, ?)");
+  stmt.run([cleanName, cleanPhone, cleanId, cleanNationality]);
   stmt.free();
   saveToFile();
 
@@ -199,16 +202,16 @@ function setGuestBanStatus(guestId, isBanned, reason) {
 }
 
 /**
- * Update guest details (name, phone, id_number).
+ * Update guest details (name, phone, id_number, nationality).
  * Accessible to authenticated staff and admin.
  */
-function updateGuest(guestId, { name, phone = '', id_number = '' } = {}) {
+function updateGuest(guestId, { name, phone = '', id_number = '', nationality = 'سعودي' } = {}) {
   const targetId = parseInt(guestId, 10);
   if (!targetId || isNaN(targetId)) {
     throw new Error('معرف النزيل غير صالح.');
   }
 
-  const existingGuest = queryOne("SELECT id, name, phone, id_number FROM guests WHERE id = ?", [targetId]);
+  const existingGuest = queryOne("SELECT id, name, phone, id_number, nationality FROM guests WHERE id = ?", [targetId]);
   if (!existingGuest) {
     throw new Error('النزيل غير موجود في قاعدة البيانات.');
   }
@@ -220,6 +223,9 @@ function updateGuest(guestId, { name, phone = '', id_number = '' } = {}) {
   const cleanName = name.trim();
   const cleanPhone = (phone || '').trim();
   const cleanId = (id_number || '').trim();
+  const cleanNationality = (nationality !== undefined && nationality !== null)
+    ? (nationality.trim() || 'سعودي')
+    : (existingGuest.nationality || 'سعودي');
 
   // Validate phone format (Saudi format: 05xxxxxxxx, 10 digits) - reuses exact rule from addCustomer / createReservation
   if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
@@ -247,8 +253,8 @@ function updateGuest(guestId, { name, phone = '', id_number = '' } = {}) {
     }
   }
 
-  const stmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ? WHERE id = ?");
-  stmt.run([cleanName, cleanPhone, cleanId, targetId]);
+  const stmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ?, nationality = ? WHERE id = ?");
+  stmt.run([cleanName, cleanPhone, cleanId, cleanNationality, targetId]);
   stmt.free();
   saveToFile();
 
@@ -271,6 +277,7 @@ function searchGuest({ phone = '', id_number = '' } = {}) {
       g.name, 
       g.phone, 
       g.id_number, 
+      g.nationality,
       g.created_at,
       g.is_banned,
       g.ban_reason,
@@ -305,8 +312,8 @@ function bulkImportGuests(guestsList) {
   let skipped = 0;
   const updatedGuests = [];
 
-  const insertStmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
-  const updateStmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ? WHERE id = ?");
+  const insertStmt = db.prepare("INSERT INTO guests (name, phone, id_number, nationality) VALUES (?, ?, ?, ?)");
+  const updateStmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ?, nationality = ? WHERE id = ?");
 
   db.run("BEGIN TRANSACTION;");
   try {
@@ -328,6 +335,13 @@ function bulkImportGuests(guestsList) {
         g.id_number || g.idNumber || g.national_id || g.iqama ||
         g['الهوية'] || g['رقم الهوية'] || g['الهوية الوطنية'] || g['السجل المدني'] || g['الإقامة'] || g['رقم الإقامة'] || ''
       ).trim();
+
+      // Resolve Nationality
+      let rawNationality = String(
+        g.nationality || g.Nationality ||
+        g['الجنسية'] || g['جنسية'] || ''
+      ).trim();
+      let nationality = rawNationality || 'سعودي';
 
       // Normalize Saudi mobile number (e.g. +9665..., 9665..., 5...)
       let phone = rawPhone.replace(/\D/g, '');
@@ -351,23 +365,24 @@ function bulkImportGuests(guestsList) {
       let existing = null;
       let matchReason = '';
       if (id_number) {
-        existing = queryOne("SELECT id, name, phone, id_number FROM guests WHERE id_number = ?", [id_number]);
+        existing = queryOne("SELECT id, name, phone, id_number, nationality FROM guests WHERE id_number = ?", [id_number]);
         if (existing) matchReason = `تطابق رقم الهوية (${id_number})`;
       }
       if (!existing && phone) {
-        existing = queryOne("SELECT id, name, phone, id_number FROM guests WHERE phone = ?", [phone]);
+        existing = queryOne("SELECT id, name, phone, id_number, nationality FROM guests WHERE phone = ?", [phone]);
         if (existing) matchReason = `تطابق رقم الجوال (${phone})`;
       }
 
       if (!existing) {
-        insertStmt.run([name, phone, id_number]);
+        insertStmt.run([name, phone, id_number, nationality]);
         inserted++;
       } else {
         // Merge/update missing fields if existing record had incomplete data
         const mergedName = name || existing.name;
         const mergedPhone = phone || existing.phone;
         const mergedId = id_number || existing.id_number;
-        updateStmt.run([mergedName, mergedPhone, mergedId, existing.id]);
+        const mergedNationality = rawNationality || existing.nationality || 'سعودي';
+        updateStmt.run([mergedName, mergedPhone, mergedId, mergedNationality, existing.id]);
         updated++;
         if (updatedGuests.length < 100) {
           updatedGuests.push({
@@ -375,6 +390,7 @@ function bulkImportGuests(guestsList) {
             name: mergedName,
             phone: mergedPhone,
             id_number: mergedId,
+            nationality: mergedNationality,
             matchReason: matchReason || 'تطابق في البيانات السابقة'
           });
         }

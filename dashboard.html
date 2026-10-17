@@ -933,10 +933,14 @@
             </div>
             <div class="card-body">
               <form id="add-customer-form">
-                <div class="form-row">
+                <div class="form-row" style="display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 12px;">
                   <div class="form-group">
                     <label for="new-customer-name">اسم النزيل / العميل الكامل <span class="field-required" aria-hidden="true">*</span></label>
                     <input type="text" id="new-customer-name" class="form-control" required placeholder="مثال: عبد الله خالد الشمري">
+                  </div>
+                  <div class="form-group">
+                    <label for="new-customer-nationality">الجنسية</label>
+                    <input type="text" id="new-customer-nationality" list="common-nationalities" class="form-control" value="سعودي" placeholder="الجنسية">
                   </div>
                   <div class="form-group">
                     <label for="new-customer-phone">رقم الجوال</label>
@@ -1007,6 +1011,7 @@
                   <tr>
                     <th>معرف النزيل</th>
                     <th>اسم النزيل الكامل</th>
+                    <th>الجنسية</th>
                     <th>رقم الجوال</th>
                     <th>رقم الهوية / الجواز</th>
                     <th>عدد الإقامات المكتملة</th>
@@ -1465,6 +1470,56 @@
   </div> <!-- End .dashboard-layout -->
 
   <!-- ==================================================================
+       SHARED COMMON DATALISTS (Nationalities & Relationships)
+       ================================================================== -->
+  <datalist id="common-nationalities">
+    <option value="سعودي"></option>
+    <option value="كويتي"></option>
+    <option value="إماراتي"></option>
+    <option value="بحريني"></option>
+    <option value="عماني"></option>
+    <option value="قطري"></option>
+    <option value="مصري"></option>
+    <option value="يمني"></option>
+    <option value="سوداني"></option>
+    <option value="سوري"></option>
+    <option value="أردني"></option>
+    <option value="لبناني"></option>
+    <option value="فلسطيني"></option>
+    <option value="عراقي"></option>
+    <option value="مغربي"></option>
+    <option value="جزائري"></option>
+    <option value="تونسي"></option>
+    <option value="هندي"></option>
+    <option value="باكستاني"></option>
+    <option value="بنجلاديشي"></option>
+    <option value="فلبيني"></option>
+    <option value="إندونيسي"></option>
+    <option value="تركي"></option>
+    <option value="بريطاني"></option>
+    <option value="أمريكي"></option>
+    <option value="كندي"></option>
+    <option value="أخرى"></option>
+  </datalist>
+
+  <datalist id="common-relationships">
+    <option value="زوجة"></option>
+    <option value="زوج"></option>
+    <option value="ابن"></option>
+    <option value="ابنة"></option>
+    <option value="والد"></option>
+    <option value="والدة"></option>
+    <option value="أخ"></option>
+    <option value="أخت"></option>
+    <option value="سائق"></option>
+    <option value="خادمة"></option>
+    <option value="مرافق شخصي"></option>
+    <option value="صديق"></option>
+    <option value="زميل عمل"></option>
+    <option value="أخرى"></option>
+  </datalist>
+
+  <!-- ==================================================================
        NEW RESERVATION MODAL / SLIDE-OVER DRAWER
        ================================================================== -->
   <div id="new-reservation-modal" class="modal-backdrop modal-layout-backdrop" dir="rtl" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 100000; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;">
@@ -1537,10 +1592,30 @@
             <span>⚡ إدخال الجوال أو رقم الهوية / الجواز يسترجع سجل النزيل السابق تلقائياً</span>
           </div>
 
-          <div class="form-group guest-name-group">
-            <label for="guest-name">اسم النزيل الثلاثي <span class="field-required" aria-hidden="true">*</span></label>
-            <input type="text" id="guest-name" required placeholder="مثال: محمد عبدالله العمري" class="form-control">
+          <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+            <div class="form-group guest-name-group" style="margin-bottom: 0;">
+              <label for="guest-name">اسم النزيل الثلاثي <span class="field-required" aria-hidden="true">*</span></label>
+              <input type="text" id="guest-name" required placeholder="مثال: محمد عبدالله العمري" class="form-control">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="guest-nationality">الجنسية</label>
+              <input type="text" id="guest-nationality" list="common-nationalities" class="form-control" value="سعودي" placeholder="الجنسية">
+            </div>
           </div>
+          </section>
+
+          <!-- Section: Companions (المرافقون) -->
+          <section class="modal-section-card companions-card" id="reservation-companions-section" style="margin-top: 14px;">
+            <div class="modal-section-card__header" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>👥 مرافقو الحجز (اختياري)</span>
+              <button type="button" id="btn-add-companion-row" class="btn btn-sm btn-secondary" style="font-size: 0.78rem; padding: 4px 10px; font-weight: 700;">
+                + إضافة مرافق
+              </button>
+            </div>
+            <div id="new-res-companions-list" style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+              <!-- Dynamic companion rows added here -->
+            </div>
+            <p id="new-res-no-companions-hint" style="color: #94a3b8; font-size: 0.8rem; margin: 8px 0 0; text-align: center;">لا يوجد مرافقون مضافون حالياً. اضغط على "+ إضافة مرافق" لإضافة بيانات المرافقين.</p>
           </section>
 
           <!-- Section 2: Room & Stay Details -->
@@ -1890,7 +1965,7 @@
           <label for="edit-inv-guest-name" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">اسم النزيل <span class="field-required" aria-hidden="true">*</span></label>
           <input type="text" id="edit-inv-guest-name" required class="form-control" style="font-weight: 600;">
         </div>
-        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-group" style="margin-bottom: 0;">
             <label for="edit-inv-guest-phone" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">رقم الجوال <span class="field-required" aria-hidden="true">*</span></label>
             <input type="tel" id="edit-inv-guest-phone" required class="form-control" placeholder="05xxxxxxxx">
@@ -1899,6 +1974,10 @@
             <label for="edit-inv-guest-id" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">الهوية / الجواز</label>
             <input type="text" id="edit-inv-guest-id" class="form-control" placeholder="10 أرقام أو جواز">
           </div>
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label for="edit-inv-guest-nationality" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">الجنسية</label>
+          <input type="text" id="edit-inv-guest-nationality" list="common-nationalities" class="form-control" placeholder="الجنسية (مثال: سعودي)">
         </div>
 
         <!-- Financial Section -->
@@ -1966,6 +2045,11 @@
           <input type="tel" id="edit-guest-phone" class="form-control" placeholder="0501234567" style="font-family: monospace; font-size: 0.9rem;">
         </div>
 
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label for="edit-guest-nationality" style="display: block; font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: #334155;">الجنسية</label>
+          <input type="text" id="edit-guest-nationality" list="common-nationalities" class="form-control" placeholder="الجنسية (مثال: سعودي)" style="font-size: 0.9rem;">
+        </div>
+
         <div class="form-group" style="margin-bottom: 20px;">
           <label for="edit-guest-id-number" style="display: block; font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: #334155;">رقم الهوية الوطنية / الإقامة / جواز السفر</label>
           <input type="text" id="edit-guest-id-number" class="form-control" placeholder="10 أرقام للهوية/الإقامة أو 6-9 خانات للجواز" style="font-size: 0.9rem;">
@@ -1976,6 +2060,82 @@
           <button type="submit" id="btn-save-edit-guest" class="btn btn-primary btn-sm" style="padding: 8px 22px; font-weight: 800; background: #1a432a; border-color: #1a432a;">حفظ التعديلات ✓</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Manage Reservation Companions -->
+  <div id="reservation-companions-modal" class="modal-backdrop modal-layout-backdrop" dir="rtl" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); z-index: 100060; align-items: center; justify-content: center; overflow-y: auto; padding: 20px;">
+    <div class="modal-layout" style="background: white; border-radius: 16px; max-width: 620px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); overflow: hidden; margin: auto;">
+      <div class="modal-layout__header" style="background: #0369a1; color: white; padding: 16px 22px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.3rem;">👥</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800;">إدارة مرافقين الحجز</h3>
+            <span id="companions-modal-subtitle" style="font-size: 0.78rem; opacity: 0.9;"></span>
+          </div>
+        </div>
+        <button id="btn-close-reservation-companions" type="button" class="modal-layout__close" style="background: none; border: none; color: white; font-size: 1.3rem; cursor: pointer;">&times;</button>
+      </div>
+
+      <div class="modal-layout__body" style="padding: 20px; max-height: calc(85vh - 75px); overflow-y: auto;">
+        <!-- List of current companions -->
+        <div style="margin-bottom: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 0.88rem; font-weight: 800; color: #1e293b;">قائمة المرافقين المسجلين:</span>
+            <span id="companions-list-count" class="badge" style="background: #e0f2fe; color: #0369a1; font-weight: 800;">0 مرافق</span>
+          </div>
+          <div id="reservation-companions-list" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Rendered by JS -->
+          </div>
+          <div id="reservation-companions-empty" style="display: none; padding: 18px; text-align: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; font-size: 0.85rem;">
+            لا يوجد مرافقون مسجلون لهذا الحجز حالياً. يمكنك إضافة مرافق جديد عبر النموذج أدناه.
+          </div>
+        </div>
+
+        <!-- Add / Edit Companion Form -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+          <h4 id="companion-form-title" style="margin: 0 0 12px 0; font-size: 0.9rem; font-weight: 800; color: #0369a1;">+ إضافة مرافق جديد</h4>
+          <form id="reservation-companion-form">
+            <input type="hidden" id="comp-form-res-id">
+            <input type="hidden" id="comp-form-id">
+
+            <div class="form-row" style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; margin-bottom: 10px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="comp-form-name" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">اسم المرافق الكامل <span class="field-required" aria-hidden="true">*</span></label>
+                <input type="text" id="comp-form-name" required class="form-control" placeholder="اسم المرافق الكامل">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="comp-form-rel" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">صلة القرابة</label>
+                <input type="text" id="comp-form-rel" list="common-relationships" class="form-control" placeholder="زوجة، ابن، صديق...">
+              </div>
+            </div>
+
+            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="comp-form-id-num" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">الهوية / الجواز</label>
+                <input type="text" id="comp-form-id-num" class="form-control" placeholder="الهوية أو الجواز">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="comp-form-nat" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">الجنسية</label>
+                <input type="text" id="comp-form-nat" list="common-nationalities" class="form-control" value="سعودي" placeholder="الجنسية">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="comp-form-phone" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">رقم الجوال</label>
+                <input type="tel" id="comp-form-phone" class="form-control" placeholder="05xxxxxxxx">
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+              <button type="button" id="btn-cancel-edit-comp" class="btn btn-secondary btn-sm" style="display: none; padding: 6px 14px; font-weight: 700;">إلغاء التعديل</button>
+              <button type="submit" id="btn-save-comp" class="btn btn-primary btn-sm" style="background: #0369a1; border-color: #0369a1; padding: 6px 18px; font-weight: 800;">حفظ المرافق ✓</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="modal-layout__footer" style="display: flex; justify-content: flex-end; border-top: 1px solid #f1f5f9; padding: 12px 20px;">
+        <button type="button" id="btn-done-reservation-companions" class="btn btn-secondary btn-sm" style="padding: 6px 18px; font-weight: 700;">تم وإغلاق</button>
+      </div>
     </div>
   </div>
 

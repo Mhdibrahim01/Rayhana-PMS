@@ -3,6 +3,7 @@
 
   const reservationForm = document.getElementById('reservation-form');
   const guestNameInput = document.getElementById('guest-name');
+  const guestNationalityInput = document.getElementById('guest-nationality');
   const guestPhoneInput = document.getElementById('guest-phone');
   const guestPhoneError = document.getElementById('guest-phone-error');
   const guestIdNumberInput = document.getElementById('guest-id-number');
@@ -71,8 +72,30 @@
   const addCustomerForm = document.getElementById('add-customer-form');
   const btnCancelAddCustomer = document.getElementById('btn-cancel-add-customer');
   const newCustomerName = document.getElementById('new-customer-name');
+  const newCustomerNationality = document.getElementById('new-customer-nationality');
   const newCustomerPhone = document.getElementById('new-customer-phone');
   const newCustomerId = document.getElementById('new-customer-id');
+  const btnAddCompanionRow = document.getElementById('btn-add-companion-row');
+  const newResCompanionsList = document.getElementById('new-res-companions-list');
+  const newResNoCompanionsHint = document.getElementById('new-res-no-companions-hint');
+  const reservationCompanionsModal = document.getElementById('reservation-companions-modal');
+  const btnCloseReservationCompanions = document.getElementById('btn-close-reservation-companions');
+  const btnDoneReservationCompanions = document.getElementById('btn-done-reservation-companions');
+  const companionsModalSubtitle = document.getElementById('companions-modal-subtitle');
+  const companionsListCount = document.getElementById('companions-list-count');
+  const reservationCompanionsList = document.getElementById('reservation-companions-list');
+  const reservationCompanionsEmpty = document.getElementById('reservation-companions-empty');
+  const reservationCompanionForm = document.getElementById('reservation-companion-form');
+  const compFormResId = document.getElementById('comp-form-res-id');
+  const compFormId = document.getElementById('comp-form-id');
+  const compFormName = document.getElementById('comp-form-name');
+  const compFormRel = document.getElementById('comp-form-rel');
+  const compFormIdNum = document.getElementById('comp-form-id-num');
+  const compFormNat = document.getElementById('comp-form-nat');
+  const compFormPhone = document.getElementById('comp-form-phone');
+  const btnCancelEditComp = document.getElementById('btn-cancel-edit-comp');
+  const btnSaveComp = document.getElementById('btn-save-comp');
+  const companionFormTitle = document.getElementById('companion-form-title');
   const checkOutStar = document.getElementById('check-out-required-star');
   const checkOutHint = document.getElementById('check-out-open-hint');
   const checkOutMinimumHint = document.getElementById('check-out-minimum-hint');
@@ -915,10 +938,14 @@
         if (guest.id !== lastAutoFilledGuestId || !guestNameInput.value.trim()) {
           lastAutoFilledGuestId = guest.id;
 
-          // 1. Fill Name
+          // 1. Fill Name & Nationality
           if (guest.name) {
             guestNameInput.value = guest.name;
             highlightField(guestNameInput);
+          }
+          if (guestNationalityInput && guest.nationality) {
+            guestNationalityInput.value = guest.nationality;
+            highlightField(guestNationalityInput);
           }
 
           // 2. Cross-fill Phone / ID Number
@@ -1143,12 +1170,90 @@
     return { valid: true };
   }
 
+  function addNewReservationCompanionRow(compData = {}) {
+    if (!newResCompanionsList) return;
+    if (newResNoCompanionsHint) newResNoCompanionsHint.style.display = 'none';
+
+    const row = document.createElement('div');
+    row.className = 'new-res-companion-row';
+    row.style.cssText = 'background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; position: relative;';
+    row.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: #475569;">مرافق</span>
+        <button type="button" class="btn btn-sm btn-remove-comp-row" style="background: none; border: none; color: #ef4444; font-size: 1.1rem; cursor: pointer; padding: 0 4px; line-height: 1;" title="حذف المرافق">&times;</button>
+      </div>
+      <div class="form-row" style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; margin-bottom: 8px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.75rem; margin-bottom: 2px;">اسم المرافق *</label>
+          <input type="text" class="form-control comp-row-name" placeholder="الاسم الكامل" value="${escapeHtml(compData.name || '')}" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.75rem; margin-bottom: 2px;">صلة القرابة</label>
+          <input type="text" class="form-control comp-row-rel" list="common-relationships" placeholder="صلة القرابة" value="${escapeHtml(compData.relationship || '')}">
+        </div>
+      </div>
+      <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.75rem; margin-bottom: 2px;">الهوية / الجواز</label>
+          <input type="text" class="form-control comp-row-id" placeholder="الهوية / الجواز" value="${escapeHtml(compData.id_number || '')}">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.75rem; margin-bottom: 2px;">الجنسية</label>
+          <input type="text" class="form-control comp-row-nat" list="common-nationalities" placeholder="الجنسية" value="${escapeHtml(compData.nationality || 'سعودي')}">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.75rem; margin-bottom: 2px;">الجوال</label>
+          <input type="tel" class="form-control comp-row-phone" placeholder="05xxxxxxxx" value="${escapeHtml(compData.phone || '')}">
+        </div>
+      </div>
+    `;
+    const btnRemove = row.querySelector('.btn-remove-comp-row');
+    if (btnRemove) {
+      btnRemove.addEventListener('click', () => {
+        row.remove();
+        if (newResCompanionsList.children.length === 0 && newResNoCompanionsHint) {
+          newResNoCompanionsHint.style.display = 'block';
+        }
+      });
+    }
+    newResCompanionsList.appendChild(row);
+    const nameInput = row.querySelector('.comp-row-name');
+    if (nameInput) nameInput.focus();
+  }
+
+  function resetNewReservationCompanions() {
+    if (newResCompanionsList) newResCompanionsList.innerHTML = '';
+    if (newResNoCompanionsHint) newResNoCompanionsHint.style.display = 'block';
+  }
+
+  function collectNewReservationCompanions() {
+    if (!newResCompanionsList) return [];
+    const rows = newResCompanionsList.querySelectorAll('.new-res-companion-row');
+    const companions = [];
+    rows.forEach(r => {
+      const name = (r.querySelector('.comp-row-name')?.value || '').trim();
+      if (!name) return;
+      const relationship = (r.querySelector('.comp-row-rel')?.value || '').trim();
+      const id_number = (r.querySelector('.comp-row-id')?.value || '').trim();
+      const nationality = (r.querySelector('.comp-row-nat')?.value || '').trim() || 'سعودي';
+      const phone = (r.querySelector('.comp-row-phone')?.value || '').trim();
+      companions.push({ name, relationship, id_number, nationality, phone });
+    });
+    return companions;
+  }
+
+  if (btnAddCompanionRow) {
+    btnAddCompanionRow.addEventListener('click', () => addNewReservationCompanionRow());
+  }
+
   // Quick Reservation Form Submit
   reservationForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const bookingType = bookingTypeSelect ? bookingTypeSelect.value : 'عادي';
     const guestName = guestNameInput.value.trim();
+    const guestNationality = guestNationalityInput ? (guestNationalityInput.value.trim() || 'سعودي') : 'سعودي';
+    const companions = collectNewReservationCompanions();
     const guestPhone = guestPhoneInput.value.trim();
     const guestIdNumber = guestIdNumberInput.value.trim();
     const roomId = roomSelect.value;
@@ -1195,6 +1300,8 @@
     try {
       let res = await window.api.createReservation({
         guestName,
+        guestNationality,
+        companions,
         guestPhone,
         guestIdNumber,
         roomId,
@@ -1226,6 +1333,8 @@
         if (confirmed) {
           res = await window.api.createReservation({
             guestName,
+            guestNationality,
+            companions,
             guestPhone,
             guestIdNumber,
             roomId,
@@ -1257,6 +1366,8 @@
           handleBookingTypeChange();
         }
         guestNameInput.value = '';
+        if (guestNationalityInput) guestNationalityInput.value = 'سعودي';
+        resetNewReservationCompanions();
         guestPhoneInput.value = '';
         guestIdNumberInput.value = '';
         totalPriceInput.value = '';
@@ -1511,6 +1622,8 @@
     clearFieldError(guestIdNumberInput, guestIdError);
     isPaidAmountCustomized = false;
     unlockRoomSelect();
+    resetNewReservationCompanions();
+    if (guestNationalityInput) guestNationalityInput.value = 'سعودي';
   }
 
   if (btnOpenNewReservationModal) {
@@ -1773,12 +1886,28 @@
         <tr class="${isRowLate ? 'late-checkout-row' : ''}">
           <td style="font-family: monospace; font-weight: 700; color: var(--primary); white-space: nowrap;">#${r.id}</td>
           <td class="res-cell-guest">
-            <div class="res-guest-name">${escapeHtml(r.guest_name)}</div>
+            <div class="res-guest-name">
+              ${escapeHtml(r.guest_name)}
+              ${r.guest_nationality ? `<span class="res-guest-nat-tag" style="font-size: 0.72rem; font-weight: 600; color: #475569; background: #f1f5f9; padding: 1px 6px; border-radius: 4px; margin-right: 6px;">${escapeHtml(r.guest_nationality)}</span>` : ''}
+            </div>
             <div class="res-guest-meta">
               ${r.guest_id_number ? `<span>هوية: ${escapeHtml(r.guest_id_number)}</span>` : ''}
               ${r.guest_id_number && r.guest_phone ? `<span class="res-meta-dot">•</span>` : ''}
               ${r.guest_phone ? `<span dir="ltr"><bdi>${escapeHtml(r.guest_phone)}</bdi></span>` : ''}
             </div>
+            ${(r.companions_count && Number(r.companions_count) > 0) ? `
+              <div style="margin-top: 4px;">
+                <button type="button" class="btn btn-sm btn-companions-badge" data-action="manage-companions" data-id="${r.id}" style="font-size: 0.72rem; font-weight: 700; color: #0369a1; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 12px; padding: 1px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="عرض وإدارة المرافقين">
+                  👥 ${r.companions_count} ${Number(r.companions_count) === 1 ? 'مرافق' : 'مرافقين'}
+                </button>
+              </div>
+            ` : `
+              <div style="margin-top: 4px;">
+                <button type="button" class="btn btn-sm btn-companions-badge-add" data-action="manage-companions" data-id="${r.id}" style="font-size: 0.7rem; font-weight: 600; color: #64748b; background: transparent; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 1px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="إضافة أو إدارة المرافقين">
+                  + مرافق
+                </button>
+              </div>
+            `}
           </td>
           <td data-label="رقم الغرفة" style="white-space: nowrap; text-align: center;">
             <button type="button" class="checkout-room-chip clickable-room-chip" data-action="preview-reservation" data-id="${r.id}" title="عرض تفاصيل الغرفة ${escapeHtml(r.room_number)}">
@@ -1899,6 +2028,14 @@
       <button type="button" class="res-overflow-item" data-action="edit-guest" data-id="${r.id}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
         <span>تعديل بيانات النزيل</span>
+      </button>
+    `);
+
+    // Manage companions
+    items.push(`
+      <button type="button" class="res-overflow-item" data-action="manage-companions" data-id="${r.id}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        <span>إدارة المرافقين (Companions)</span>
       </button>
     `);
 
@@ -4158,6 +4295,7 @@
     addCustomerForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = newCustomerName ? newCustomerName.value.trim() : '';
+      const nationality = newCustomerNationality ? (newCustomerNationality.value.trim() || 'سعودي') : 'سعودي';
       const phone = newCustomerPhone ? newCustomerPhone.value.trim() : '';
       const id_number = newCustomerId ? newCustomerId.value.trim() : '';
 
@@ -4171,7 +4309,7 @@
       const activeRole = localStorage.getItem('currentUserRole') || (App.State.currentUser ? App.State.currentUser.role : 'User');
 
       try {
-        const res = await window.api.addCustomer({ name, phone, id_number }, activeRole);
+        const res = await window.api.addCustomer({ name, nationality, phone, id_number }, activeRole);
         if (res.success) {
           showToast(`تم تسجيل بيانات النزيل "${name}" بنجاح!`, 'success');
           addCustomerForm.reset();
@@ -4273,6 +4411,12 @@
     // Edit Guest Modal Open
     if (action === 'edit-guest') {
       window.DashboardApp.Helpers.openEditGuestModal(id);
+      return;
+    }
+
+    // Manage Companions Modal Open
+    if (action === 'manage-companions') {
+      openCompanionsModal(id);
       return;
     }
 
@@ -4487,6 +4631,217 @@
       }
     }
   });
+
+  // =========================================================================
+  // RESERVATION COMPANIONS MODAL MANAGEMENT
+  // =========================================================================
+  let currentManagingReservationId = null;
+
+  async function openCompanionsModal(reservationId) {
+    const targetId = parseInt(reservationId, 10);
+    if (!targetId || isNaN(targetId)) return;
+
+    currentManagingReservationId = targetId;
+    if (compFormResId) compFormResId.value = targetId;
+    resetCompanionForm();
+
+    const r = findLoadedReservation(targetId);
+    if (companionsModalSubtitle) {
+      if (r) {
+        companionsModalSubtitle.textContent = `الغرفة ${r.room_number || '-'} • النزيل: ${r.guest_name || '-'}`;
+      } else {
+        companionsModalSubtitle.textContent = `حجز رقم #${targetId}`;
+      }
+    }
+
+    if (reservationCompanionsModal) {
+      reservationCompanionsModal.style.display = 'flex';
+    }
+
+    await loadReservationCompanionsList(targetId);
+  }
+
+  function closeCompanionsModal() {
+    if (reservationCompanionsModal) {
+      reservationCompanionsModal.style.display = 'none';
+    }
+    resetCompanionForm();
+    currentManagingReservationId = null;
+  }
+
+  function resetCompanionForm() {
+    if (compFormId) compFormId.value = '';
+    if (compFormName) compFormName.value = '';
+    if (compFormRel) compFormRel.value = '';
+    if (compFormIdNum) compFormIdNum.value = '';
+    if (compFormNat) compFormNat.value = 'سعودي';
+    if (compFormPhone) compFormPhone.value = '';
+    if (btnCancelEditComp) btnCancelEditComp.style.display = 'none';
+    if (btnSaveComp) btnSaveComp.textContent = 'حفظ المرافق ✓';
+    if (companionFormTitle) companionFormTitle.textContent = '+ إضافة مرافق جديد';
+  }
+
+  async function loadReservationCompanionsList(reservationId) {
+    if (!reservationCompanionsList) return;
+    try {
+      const res = await window.api.getReservationCompanions(reservationId);
+      const companions = (res && res.success && Array.isArray(res.data)) ? res.data : [];
+
+      if (companionsListCount) {
+        companionsListCount.textContent = `${companions.length} ${companions.length === 1 ? 'مرافق' : 'مرافقين'}`;
+      }
+
+      if (companions.length === 0) {
+        reservationCompanionsList.innerHTML = '';
+        if (reservationCompanionsEmpty) reservationCompanionsEmpty.style.display = 'block';
+        return;
+      }
+
+      if (reservationCompanionsEmpty) reservationCompanionsEmpty.style.display = 'none';
+
+      reservationCompanionsList.innerHTML = companions.map(c => `
+        <div class="companion-list-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-weight: 800; font-size: 0.9rem; color: #1e293b;">${escapeHtml(c.name)}</span>
+              ${c.relationship ? `<span style="font-size: 0.75rem; color: #475569; background: #e2e8f0; padding: 1px 6px; border-radius: 4px; font-weight: 600;">${escapeHtml(c.relationship)}</span>` : ''}
+              <span style="font-size: 0.75rem; color: #0369a1; background: #e0f2fe; padding: 1px 6px; border-radius: 4px; font-weight: 600;">${escapeHtml(c.nationality || 'سعودي')}</span>
+            </div>
+            <div style="font-size: 0.78rem; color: #64748b; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap;">
+              ${c.id_number ? `<span>هوية: <strong style="color: #334155;">${escapeHtml(c.id_number)}</strong></span>` : ''}
+              ${c.phone ? `<span>جوال: <strong dir="ltr" style="color: #334155;"><bdi>${escapeHtml(c.phone)}</bdi></strong></span>` : ''}
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px; flex-shrink: 0;">
+            <button type="button" class="btn btn-sm btn-edit-comp-item" data-id="${c.id}" data-name="${escapeHtml(c.name)}" data-rel="${escapeHtml(c.relationship || '')}" data-idnum="${escapeHtml(c.id_number || '')}" data-nat="${escapeHtml(c.nationality || 'سعودي')}" data-phone="${escapeHtml(c.phone || '')}" style="background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; padding: 4px 8px; font-size: 0.78rem; border-radius: 6px; cursor: pointer;" title="تعديل">
+              ✏️
+            </button>
+            <button type="button" class="btn btn-sm btn-delete-comp-item" data-id="${c.id}" data-name="${escapeHtml(c.name)}" style="background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; padding: 4px 8px; font-size: 0.78rem; border-radius: 6px; cursor: pointer;" title="حذف">
+              🗑️
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      // Wire edit buttons
+      reservationCompanionsList.querySelectorAll('.btn-edit-comp-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (compFormId) compFormId.value = btn.dataset.id;
+          if (compFormName) compFormName.value = btn.dataset.name;
+          if (compFormRel) compFormRel.value = btn.dataset.rel;
+          if (compFormIdNum) compFormIdNum.value = btn.dataset.idnum;
+          if (compFormNat) compFormNat.value = btn.dataset.nat || 'سعودي';
+          if (compFormPhone) compFormPhone.value = btn.dataset.phone;
+          if (btnCancelEditComp) btnCancelEditComp.style.display = 'inline-block';
+          if (btnSaveComp) btnSaveComp.textContent = 'حفظ التعديل ✓';
+          if (companionFormTitle) companionFormTitle.textContent = '✏️ تعديل بيانات المرافق';
+          if (compFormName) compFormName.focus();
+        });
+      });
+
+      // Wire delete buttons
+      reservationCompanionsList.querySelectorAll('.btn-delete-comp-item').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const compId = parseInt(btn.dataset.id, 10);
+          const compName = btn.dataset.name || 'المرافق';
+          const confirmed = await showConfirmDialog({
+            title: 'تأكيد حذف المرافق',
+            message: `هل أنت متأكد من رغبتك في حذف المرافق "${compName}" من الحجز؟`,
+            confirmText: 'نعم، حذف المرافق',
+            cancelText: 'إلغاء',
+            isDanger: true
+          });
+          if (confirmed) {
+            try {
+              const delRes = await window.api.deleteReservationCompanion(compId);
+              if (delRes && delRes.success) {
+                showToast(`تم حذف المرافق "${compName}" بنجاح.`, 'success');
+                if (compFormId && compFormId.value === String(compId)) resetCompanionForm();
+                await loadReservationCompanionsList(currentManagingReservationId);
+                loadReservationsData();
+              } else {
+                showToast(delRes?.error || 'فشل حذف المرافق.', 'error');
+              }
+            } catch (err) {
+              showToast(`خطأ: ${err.message}`, 'error');
+            }
+          }
+        });
+      });
+    } catch (err) {
+      console.error('Error loading companions:', err);
+      showToast('خطأ أثناء تحميل بيانات المرافقين.', 'error');
+    }
+  }
+
+  if (reservationCompanionForm) {
+    reservationCompanionForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const resId = currentManagingReservationId || parseInt(compFormResId.value, 10);
+      const companionId = compFormId && compFormId.value ? parseInt(compFormId.value, 10) : null;
+      const name = compFormName ? compFormName.value.trim() : '';
+      const relationship = compFormRel ? compFormRel.value.trim() : '';
+      const id_number = compFormIdNum ? compFormIdNum.value.trim() : '';
+      const nationality = compFormNat ? (compFormNat.value.trim() || 'سعودي') : 'سعودي';
+      const phone = compFormPhone ? compFormPhone.value.trim() : '';
+
+      if (!name) {
+        showToast('يرجى إدخال اسم المرافق.', 'warning');
+        return;
+      }
+
+      try {
+        if (btnSaveComp) {
+          btnSaveComp.disabled = true;
+          btnSaveComp.textContent = 'جاري الحفظ...';
+        }
+
+        let res;
+        if (companionId) {
+          res = await window.api.updateReservationCompanion({ companionId, name, relationship, id_number, nationality, phone });
+        } else {
+          res = await window.api.addReservationCompanion({ reservationId: resId, name, relationship, id_number, nationality, phone });
+        }
+
+        if (res && res.success) {
+          showToast(companionId ? 'تم تحديث بيانات المرافق بنجاح! ✓' : 'تمت إضافة المرافق للحجز بنجاح! ✓', 'success');
+          resetCompanionForm();
+          await loadReservationCompanionsList(resId);
+          loadReservationsData();
+        } else {
+          showToast(res?.error || 'فشل حفظ بيانات المرافق.', 'error');
+        }
+      } catch (err) {
+        showToast(`خطأ: ${err.message}`, 'error');
+      } finally {
+        if (btnSaveComp) {
+          btnSaveComp.disabled = false;
+          btnSaveComp.textContent = companionId ? 'حفظ التعديل ✓' : 'حفظ المرافق ✓';
+        }
+      }
+    });
+  }
+
+  if (btnCancelEditComp) {
+    btnCancelEditComp.addEventListener('click', resetCompanionForm);
+  }
+
+  if (btnCloseReservationCompanions) {
+    btnCloseReservationCompanions.addEventListener('click', closeCompanionsModal);
+  }
+
+  if (btnDoneReservationCompanions) {
+    btnDoneReservationCompanions.addEventListener('click', closeCompanionsModal);
+  }
+
+  if (reservationCompanionsModal) {
+    reservationCompanionsModal.addEventListener('click', (e) => {
+      if (e.target === reservationCompanionsModal) closeCompanionsModal();
+    });
+  }
+
+  App.Helpers.openCompanionsModal = openCompanionsModal;
+  window.openCompanionsModal = openCompanionsModal;
   App.Helpers.openNewReservationModal = openNewReservationModal;
   App.Helpers.closeNewReservationModal = closeNewReservationModal;
   App.Helpers.initiateRoomBooking = initiateRoomBooking;
