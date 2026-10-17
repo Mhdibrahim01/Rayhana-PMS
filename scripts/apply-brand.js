@@ -139,6 +139,7 @@ function applyBrand(targetBrandId) {
         pkg.build.nsis.installerIcon = 'icon.ico';
         pkg.build.nsis.uninstallerIcon = 'icon.ico';
         pkg.build.nsis.installerHeaderIcon = 'icon.ico';
+        pkg.build.nsis.runAfterFinish = false;
       }
       if (Array.isArray(pkg.build.files) && !pkg.build.files.includes('config/**/*')) {
         pkg.build.files.push('config/**/*');

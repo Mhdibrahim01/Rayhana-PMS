@@ -71,7 +71,7 @@
       "uninstallerIcon": "icon.ico",
       "installerHeaderIcon": "icon.ico",
       "deleteAppDataOnUninstall": false,
-      "runAfterFinish": true,
+      "runAfterFinish": false,
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "files": [

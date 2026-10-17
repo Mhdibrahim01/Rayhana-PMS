@@ -3,6 +3,8 @@
  * Domain: ipc/auth.js
  */
 
+const path = require('path');
+
 module.exports = function registerAuthIpc(ipcMain, { db, session }) {
   // 1. Authentication & Session with Employee Logging
   ipcMain.handle('auth:login', async (event, { username, password }) => {
@@ -14,7 +16,7 @@ module.exports = function registerAuthIpc(ipcMain, { db, session }) {
         session.currentLogId = db.logEmployeeLogin(session.currentUser.id);
         result.logId = session.currentLogId;
         if (session.mainWindow) {
-          session.mainWindow.loadFile('dashboard.html');
+          session.mainWindow.loadFile(path.join(__dirname, '..', 'dashboard.html'));
         }
       }
       return result;
@@ -32,7 +34,7 @@ module.exports = function registerAuthIpc(ipcMain, { db, session }) {
     }
     session.currentUser = null;
     if (session.mainWindow) {
-      session.mainWindow.loadFile('login.html');
+      session.mainWindow.loadFile(path.join(__dirname, '..', 'login.html'));
       session.mainWindow.webContents.once('did-finish-load', () => {
         if (session.mainWindow && !session.mainWindow.isDestroyed()) {
           session.mainWindow.webContents.focus();
