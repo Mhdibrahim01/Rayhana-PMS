@@ -433,7 +433,9 @@ window.DashboardApp = {
       invoiceHeader: 'فاتورة ضريبية - ريحانة للوحدات السكنية',
       logo: 'assets/brands/hotel_1/logo.png',
       seal: 'assets/brands/hotel_1/seal.svg',
-      signature: 'assets/brands/hotel_1/signature.svg'
+      signature: 'assets/brands/hotel_1/signature.svg',
+      showSeal: true,
+      showSignature: true
     };
   }
 

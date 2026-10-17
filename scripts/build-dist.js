@@ -10,6 +10,8 @@
  * Usage:
  *   npm run dist                        (Builds all hotel brands and packages into a compressed zip)
  *   npm run dist:all                    (Explicitly builds all hotel brands)
+ *   npm run dist:rayhana                (Builds the official Rayhana & Shams Al-Manazel edition)
+ *   npm run dist:general                (Builds the customizable general office edition)
  *   npm run dist:single                 (Builds only the currently active hotel brand)
  *   node scripts/build-dist.js --brand <hotel_id> (Builds only the specified hotel brand)
  */
@@ -80,12 +82,18 @@ async function runBuildPipeline() {
   const originalActiveBrand = config.activeBrand || 'hotel_1';
   const version = getPackageVersion();
 
+  const isRayhana = process.argv.includes('--rayhana');
+  const isGeneral = process.argv.includes('--general');
   const isSingle = process.argv.includes('--single') || process.argv.includes('-s');
   const brandIdx = process.argv.indexOf('--brand');
   const specificBrand = brandIdx !== -1 ? process.argv[brandIdx + 1] : null;
 
   let targetBrandIds = [];
-  if (specificBrand) {
+  if (isRayhana) {
+    targetBrandIds = ['hotel_1'];
+  } else if (isGeneral) {
+    targetBrandIds = ['general'];
+  } else if (specificBrand) {
     if (!brands[specificBrand]) {
       console.error(`\n❌ Error: Specified brand [${specificBrand}] does not exist in config/branding.json`);
       console.error(`Available brands: ${Object.keys(brands).join(', ')}\n`);

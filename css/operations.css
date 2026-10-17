@@ -1943,10 +1943,73 @@
 }
 
 /* Shared shell for the report, backup, and destructive confirmation dialogs. */
+#invoice-modal,
+#invoice-modal > .modal-layout,
+#invoice-modal * {
+  -webkit-app-region: no-drag !important;
+}
+
 #invoice-modal > .modal-layout {
   width: min(1100px, 96vw) !important;
   max-width: 1100px !important;
   max-height: calc(100vh - 24px) !important;
+}
+
+#invoice-receipt-tabs-bar {
+  position: relative !important;
+  z-index: 10 !important;
+  flex: 0 0 auto !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-app-region: no-drag !important;
+  pointer-events: auto !important;
+}
+
+#invoice-receipt-tabs-container {
+  -webkit-app-region: no-drag !important;
+  pointer-events: auto !important;
+}
+
+.invoice-receipt-tab-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  padding: 0 14px !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  border-radius: 7px !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  border: 1px solid #cbd5e1 !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: manipulation !important;
+  pointer-events: auto !important;
+  -webkit-app-region: no-drag !important;
+  white-space: nowrap !important;
+  transition: all 0.15s ease !important;
+}
+
+.invoice-receipt-tab-btn:hover:not(.active) {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+.invoice-receipt-tab-btn:active {
+  transform: translateY(1px);
+}
+
+.invoice-receipt-tab-btn.active {
+  background: #4338ca !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border-color: #4338ca !important;
+  box-shadow: 0 1px 3px rgba(67, 56, 202, 0.25) !important;
+  cursor: default !important;
 }
 
 #invoice-printable-area {

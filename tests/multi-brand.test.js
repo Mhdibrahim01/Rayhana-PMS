@@ -18,6 +18,7 @@ test('Multi-Brand Configuration & Profiles Integrity', async (t) => {
     assert.ok(config.brands.hotel_2, 'hotel_2 must exist');
     assert.ok(config.brands.hotel_3, 'hotel_3 must exist');
     assert.ok(config.brands.hotel_4, 'hotel_4 must exist');
+    assert.ok(config.brands.general, 'general brand must exist');
     assert.ok(Object.keys(config.brands).includes(config.activeBrand), 'activeBrand must be valid');
   });
 
@@ -127,6 +128,30 @@ test('Multi-Brand IPC Handlers & Access Control', async (t) => {
       assert.equal(updateRes.brands.hotel_2.phone, '0500000002');
     } finally {
       // Restore original config
+      fs.writeFileSync(BRANDING_PATH, JSON.stringify(originalConfig, null, 2), 'utf8');
+    }
+  });
+
+  await t.test('Admin role can update general brand profile including showSeal and showSignature toggles', async () => {
+    session.currentUser = { id: 1, username: 'admin', role: 'Admin' };
+    const originalConfig = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
+
+    try {
+      const updateRes = await fakeIpc.invoke('brand:update-profile', {}, {
+        brandId: 'general',
+        profile: {
+          nameAr: 'مكتب الاختبار العام',
+          companyAr: 'مؤسسة الاختبار العقاري',
+          showSeal: false,
+          showSignature: false
+        }
+      });
+      assert.equal(updateRes.success, true);
+      assert.equal(updateRes.brands.general.nameAr, 'مكتب الاختبار العام');
+      assert.equal(updateRes.brands.general.companyAr, 'مؤسسة الاختبار العقاري');
+      assert.equal(updateRes.brands.general.showSeal, false);
+      assert.equal(updateRes.brands.general.showSignature, false);
+    } finally {
       fs.writeFileSync(BRANDING_PATH, JSON.stringify(originalConfig, null, 2), 'utf8');
     }
   });

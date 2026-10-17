@@ -1070,12 +1070,13 @@
                   <h2 id="brand-management-title" style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 8px;">
                     <span>🏷️</span> إدارة الهوية والعلامة التجارية (Multi-Brand / White-Label)
                   </h2>
-                  <p id="brand-management-subtitle" style="margin: 4px 0 0; font-size: 0.82rem; color: #64748b;">التبديل بين هويات الفنادق وتحديث بيانات الفاتورة والأختام والتواقيع المعتمدة.</p>
+                  <p id="brand-management-subtitle" style="margin: 4px 0 0; font-size: 0.82rem; color: #64748b;">تخصيص بيانات الفواتير اليومية والسندات الشهرية ورفع الأختام والتواقيع المعتمدة.</p>
                 </div>
                 <div id="brand-switcher-controls" style="display: flex; gap: 10px; align-items: center;">
                   <label for="brand-selector" style="font-size: 0.85rem; font-weight: 700; color: #334155;">الهوية الحالية:</label>
                   <select id="brand-selector" class="form-control" style="font-weight: 700; min-width: 240px; border: 2px solid #6366f1; border-radius: 8px;">
-                    <option value="hotel_1">ريحانة للوحدات السكنية (Rayhana Suites)</option>
+                    <option value="hotel_1">ريحانة للوحدات السكنية (النسخة الأصلية - ريحانة / شمس المنازل)</option>
+                    <option value="general">النسخة العامة للمكاتب الأخرى (General Customizable ERP)</option>
                     <option value="hotel_2">أجنحة المنار الفندقية (Al-Manar Hotel Suites)</option>
                     <option value="hotel_3">دار الضيافة للشقق المخدومة (Dar Al-Diyafa)</option>
                     <option value="hotel_4">أبراج الواحة للشقق الفندقية (Al-Waha Towers)</option>
@@ -1087,64 +1088,120 @@
               </div>
 
               <!-- Brand Live Preview & Details Grid -->
-              <div style="padding: 22px; display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start;">
+              <div style="padding: 22px; display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;">
                 <!-- Brand Visual Preview Card -->
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; text-align: center;">
-                  <div style="font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 12px;">معاينة الشعار والختم والتوقيع</div>
-                  <div style="margin-bottom: 14px;">
-                    <img id="brand-preview-logo" src="assets/rayhana-logo.png" alt="شعار الفندق" style="width: 80px; height: 80px; border-radius: 14px; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.12); border: 2px solid #ffffff;">
+                  <div style="font-size: 0.8rem; font-weight: 800; color: #1e1b4b; margin-bottom: 12px;">المعاينة والأختام والشعار</div>
+                  <div style="margin-bottom: 8px;">
+                    <img id="brand-preview-logo" src="assets/rayhana-logo.png" alt="شعار الفندق" style="width: 80px; height: 80px; border-radius: 14px; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.12); border: 2px solid #ffffff; background: #fff;">
+                  </div>
+                  <div>
+                    <input type="file" id="input-brand-logo" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display: none;">
+                    <button type="button" id="btn-upload-logo" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 3px 10px; margin-bottom: 8px;">📷 رفع شعار جديد</button>
                   </div>
                   <h3 id="brand-preview-name" style="margin: 0 0 4px; font-size: 1.05rem; font-weight: 800; color: #1e293b;">ريحانة للوحدات السكنية</h3>
                   <div id="brand-preview-company" style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">مؤسسة مكتب شمس المنازل للخدمات العقارية</div>
-                  <div style="display: flex; justify-content: space-around; align-items: center; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 10px;">
-                    <div>
-                      <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 4px;">الختم المعتمد</div>
-                      <img id="brand-preview-seal" src="assets/seal.svg" alt="ختم الفندق" style="height: 52px; object-fit: contain;">
+
+                  <!-- Seal & Signature Preview Boxes -->
+                  <div style="display: flex; gap: 10px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 8px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-between;">
+                      <div style="font-size: 0.72rem; font-weight: 700; color: #475569; margin-bottom: 4px;">الختم المعتمد</div>
+                      <div style="height: 55px; display: flex; align-items: center; justify-content: center;">
+                        <img id="brand-preview-seal" src="assets/seal.svg" alt="ختم الفندق" style="max-height: 52px; max-width: 100px; object-fit: contain;">
+                      </div>
+                      <div style="margin-top: 4px; display: flex; gap: 4px;">
+                        <input type="file" id="input-brand-seal" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display: none;">
+                        <button type="button" id="btn-upload-seal" class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 2px 6px;">🔏 رفع ختم</button>
+                        <button type="button" id="btn-clear-seal" class="btn btn-outline btn-sm" style="font-size: 0.7rem; padding: 2px 6px; color: #dc2626;" title="إزالة الختم">🗑️</button>
+                      </div>
                     </div>
-                    <div>
-                      <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 4px;">توقيع الاستقبال</div>
-                      <img id="brand-preview-signature" src="assets/signature.svg" alt="توقيع الفندق" style="height: 38px; object-fit: contain;">
+                    <div style="width: 1px; background: #e2e8f0;"></div>
+                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-between;">
+                      <div style="font-size: 0.72rem; font-weight: 700; color: #475569; margin-bottom: 4px;">توقيع الاستقبال</div>
+                      <div style="height: 55px; display: flex; align-items: center; justify-content: center;">
+                        <img id="brand-preview-signature" src="assets/signature.svg" alt="توقيع الفندق" style="max-height: 40px; max-width: 100px; object-fit: contain;">
+                      </div>
+                      <div style="margin-top: 4px; display: flex; gap: 4px;">
+                        <input type="file" id="input-brand-signature" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display: none;">
+                        <button type="button" id="btn-upload-signature" class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 2px 6px;">✍️ رفع توقيع</button>
+                        <button type="button" id="btn-clear-signature" class="btn btn-outline btn-sm" style="font-size: 0.7rem; padding: 2px 6px; color: #dc2626;" title="إزالة التوقيع">🗑️</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Printing Toggles Card -->
+                  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-top: 12px; text-align: right;">
+                    <div style="font-size: 0.8rem; font-weight: 800; color: #1e1b4b; margin-bottom: 8px;">خيارات الطباعة في السندات:</div>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 700; color: #334155; margin-bottom: 6px; cursor: pointer;">
+                      <input type="checkbox" id="brand-toggle-seal" checked style="width: 16px; height: 16px; accent-color: #4338ca;">
+                      <span>إظهار الختم الإلكتروني في السند المطبوع</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 700; color: #334155; cursor: pointer;">
+                      <input type="checkbox" id="brand-toggle-signature" checked style="width: 16px; height: 16px; accent-color: #4338ca;">
+                      <span>إظهار التوقيع الإلكتروني في السند المطبوع</span>
+                    </label>
+                    <div style="font-size: 0.7rem; color: #64748b; margin-top: 6px; line-height: 1.4;">
+                      (عند إيقاف الخيار، يُترك مكانه فارغاً على السند المطبوع لتمكين الختم الحبري أو التوقيع اليدوي).
                     </div>
                   </div>
                 </div>
 
                 <!-- Editable Profile Form -->
-                <form id="brand-profile-edit-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
-                  <div class="form-group">
-                    <label for="brand-edit-name-ar" style="font-size: 0.82rem; font-weight: 700;">اسم المنشأة بالعربي</label>
-                    <input type="text" id="brand-edit-name-ar" class="form-control" required>
+                <form id="brand-profile-edit-form" style="display: flex; flex-direction: column; gap: 18px;">
+                  <!-- Daily Receipt Section -->
+                  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px;">
+                    <div style="font-size: 0.88rem; font-weight: 800; color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                      <span>🏨</span> بيانات السند والفاتورة اليومية (Daily Invoice & Hotel Profile)
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div class="form-group">
+                        <label for="brand-edit-name-ar" style="font-size: 0.8rem; font-weight: 700;">اسم المنشأة / الفندق (بالعربي)</label>
+                        <input type="text" id="brand-edit-name-ar" class="form-control" placeholder="مثال: ريحانة للوحدات السكنية" required>
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-name-en" style="font-size: 0.8rem; font-weight: 700;">اسم المنشأة بالإنجليزي</label>
+                        <input type="text" id="brand-edit-name-en" class="form-control" placeholder="مثال: Rayhana Suites" required dir="ltr">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-cr" style="font-size: 0.8rem; font-weight: 700;">رقم السجل التجاري / الترخيص</label>
+                        <input type="text" id="brand-edit-cr" class="form-control" placeholder="رقم السجل" required dir="ltr">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-vat" style="font-size: 0.8rem; font-weight: 700;">الرقم الضريبي (VAT)</label>
+                        <input type="text" id="brand-edit-vat" class="form-control" placeholder="310XXXXXXXXXXXX" dir="ltr">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-phone" style="font-size: 0.8rem; font-weight: 700;">هاتف الاستقبال</label>
+                        <input type="text" id="brand-edit-phone" class="form-control" placeholder="05XXXXXXXX" dir="ltr">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-address" style="font-size: 0.8rem; font-weight: 700;">العنوان والمدينة</label>
+                        <input type="text" id="brand-edit-address" class="form-control" placeholder="المدينة - الحي">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-postal" style="font-size: 0.8rem; font-weight: 700;">الرمز البريدي</label>
+                        <input type="text" id="brand-edit-postal" class="form-control" placeholder="34625" dir="ltr">
+                      </div>
+                    </div>
                   </div>
-                  <div class="form-group">
-                    <label for="brand-edit-name-en" style="font-size: 0.82rem; font-weight: 700;">اسم المنشأة بالإنجليزي</label>
-                    <input type="text" id="brand-edit-name-en" class="form-control" required dir="ltr">
+
+                  <!-- Monthly Contract / Receipt Section -->
+                  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px;">
+                    <div style="font-size: 0.88rem; font-weight: 800; color: #7c2d12; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                      <span>📜</span> بيانات السند الشهري وعقد الإيجار (Monthly Contract & Company Profile)
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+                      <div class="form-group">
+                        <label for="brand-edit-company-ar" style="font-size: 0.8rem; font-weight: 700;">الاسم التجاري للمؤسسة المشغلة في العقد الشهري</label>
+                        <input type="text" id="brand-edit-company-ar" class="form-control" placeholder="مثال: مؤسسة مكتب شمس المنازل للخدمات العقارية" required>
+                        <small style="color: #64748b; font-size: 0.72rem; margin-top: 2px;">هذا الاسم هو الذي يظهر في ترويسة سندات الإقامة وعقود الإيجار الشهرية.</small>
+                      </div>
+                    </div>
                   </div>
-                  <div class="form-group">
-                    <label for="brand-edit-company-ar" style="font-size: 0.82rem; font-weight: 700;">الاسم التجاري في العقد / المؤسسة</label>
-                    <input type="text" id="brand-edit-company-ar" class="form-control" required>
-                  </div>
-                  <div class="form-group">
-                    <label for="brand-edit-cr" style="font-size: 0.82rem; font-weight: 700;">رقم السجل التجاري / الرقم الموحد</label>
-                    <input type="text" id="brand-edit-cr" class="form-control" required dir="ltr">
-                  </div>
-                  <div class="form-group">
-                    <label for="brand-edit-vat" style="font-size: 0.82rem; font-weight: 700;">الرقم الضريبي (VAT)</label>
-                    <input type="text" id="brand-edit-vat" class="form-control" dir="ltr">
-                  </div>
-                  <div class="form-group">
-                    <label for="brand-edit-phone" style="font-size: 0.82rem; font-weight: 700;">هاتف الاستقبال</label>
-                    <input type="text" id="brand-edit-phone" class="form-control" dir="ltr">
-                  </div>
-                  <div class="form-group">
-                    <label for="brand-edit-address" style="font-size: 0.82rem; font-weight: 700;">العنوان والمدينة</label>
-                    <input type="text" id="brand-edit-address" class="form-control">
-                  </div>
-                  <div class="form-group">
-                    <label for="brand-edit-postal" style="font-size: 0.82rem; font-weight: 700;">الرمز البريدي</label>
-                    <input type="text" id="brand-edit-postal" class="form-control" dir="ltr">
-                  </div>
-                  <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
-                    <button type="submit" id="btn-save-brand-profile" class="btn btn-secondary" style="padding: 8px 20px; font-weight: 700;">
-                      💾 حفظ تعديلات الهوية
+
+                  <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px;">
+                    <button type="submit" id="btn-save-brand-profile" class="btn btn-primary" style="padding: 10px 24px; font-weight: 800; font-size: 0.9rem;">
+                      💾 حفظ بيانات المنشأة والأختام
                     </button>
                   </div>
                 </form>
@@ -1726,10 +1783,10 @@
   </div>
 
   <!-- Printable Hotel Tax Invoice Modal (Feature 1) -->
-  <div id="invoice-modal" class="modal-backdrop modal-layout-backdrop" dir="rtl" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); z-index: 100000; align-items: center; justify-content: center; overflow: hidden; padding: 12px;">
-    <div class="modal-layout" style="background: white; border-radius: 16px; max-width: 1100px; width: 96vw; max-height: calc(100vh - 24px); display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); overflow: hidden; margin: auto;">
+  <div id="invoice-modal" class="modal-backdrop modal-layout-backdrop" dir="rtl" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); z-index: 100000; align-items: center; justify-content: center; overflow: hidden; padding: 12px; -webkit-app-region: no-drag;">
+    <div class="modal-layout" style="background: white; border-radius: 16px; max-width: 1100px; width: 96vw; max-height: calc(100vh - 24px); display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); overflow: hidden; margin: auto; -webkit-app-region: no-drag;">
       <!-- Action Toolbar (No-Print) -->
-      <div class="no-print modal-layout__header" style="background: #1e1b4b; color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;">
+      <div class="no-print modal-layout__header" style="background: #1e1b4b; color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; -webkit-app-region: no-drag;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -1769,12 +1826,12 @@
       </div>
 
       <!-- Receipt Cycle Tabs (Monthly renewals / Multi-receipt) -->
-      <div id="invoice-receipt-tabs-bar" class="no-print" style="display: none; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <span style="font-size: 0.82rem; font-weight: 800; color: #475569;">سندات الإقامة الشهرية:</span>
-          <div id="invoice-receipt-tabs-container" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
+      <div id="invoice-receipt-tabs-bar" class="no-print" style="display: none; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; position: relative; z-index: 10; -webkit-app-region: no-drag;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0;">
+          <span style="font-size: 0.82rem; font-weight: 800; color: #475569; user-select: none; -webkit-user-select: none;">سندات الإقامة الشهرية:</span>
+          <div id="invoice-receipt-tabs-container" style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;"></div>
         </div>
-        <div id="invoice-active-tab-indicator" style="font-size: 0.78rem; font-weight: 700; color: #4338ca;"></div>
+        <div id="invoice-active-tab-indicator" style="font-size: 0.78rem; font-weight: 700; color: #4338ca; user-select: none; -webkit-user-select: none;"></div>
       </div>
 
       <!-- Printable Area -->

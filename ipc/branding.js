@@ -30,7 +30,29 @@ const DEFAULT_BRANDING = {
       accentColor: '#f59e0b',
       logo: 'assets/brands/hotel_1/logo.png',
       seal: 'assets/brands/hotel_1/seal.svg',
-      signature: 'assets/brands/hotel_1/signature.svg'
+      signature: 'assets/brands/hotel_1/signature.svg',
+      showSeal: true,
+      showSignature: true
+    },
+    general: {
+      id: 'general',
+      nameAr: 'نظام إدارة الإيواء والوحدات العقارية',
+      nameEn: 'Property & Hospitality ERP',
+      companyAr: 'مكتب الخدمات العقارية وإدارة الأملاك',
+      subtitle: 'إدارة الحجوزات والوحدات السكنية والعقارية',
+      crNumber: '7000000000',
+      vatNumber: '300000000000003',
+      address: 'المملكة العربية السعودية',
+      postalCode: '10000',
+      phone: '0500000000',
+      invoiceHeader: 'فاتورة ضريبية',
+      primaryColor: '#1e3a8a',
+      accentColor: '#f59e0b',
+      logo: 'assets/brands/general/logo.png',
+      seal: 'assets/brands/general/seal.svg',
+      signature: 'assets/brands/general/signature.svg',
+      showSeal: true,
+      showSignature: true
     },
     hotel_2: {
       id: 'hotel_2',

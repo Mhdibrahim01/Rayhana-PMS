@@ -734,8 +734,23 @@ textarea:focus-visible {
 .topbar input,
 .topbar select,
 .topbar a,
-.no-drag {
-  -webkit-app-region: no-drag;
+.no-drag,
+button,
+input,
+select,
+textarea,
+a,
+[role="button"],
+.btn,
+.modal-backdrop,
+.modal-backdrop *,
+.modal-layout,
+.modal-layout *,
+.modal-dialog,
+.modal-dialog *,
+.swal2-container,
+.swal2-container * {
+  -webkit-app-region: no-drag !important;
 }
 
 /* ── Dedicated Native Window Titlebar Strip (Clean White & Transparent) ── */

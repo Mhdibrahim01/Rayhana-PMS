@@ -1185,28 +1185,30 @@
               monthlyCycles.forEach((c, idx) => {
                 const btn = document.createElement('button');
                 btn.type = 'button';
-                btn.className = 'btn btn-sm';
-                btn.textContent = `سند ${c.title}`;
                 const isSelected = (selectedCycleIndex === idx);
-                btn.style.cssText = isSelected
-                  ? 'background: #4338ca; color: white; font-weight: 800; border: 1px solid #4338ca; border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; cursor: pointer;'
-                  : 'background: white; color: #475569; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; cursor: pointer;';
-                btn.addEventListener('click', () => {
-                  invoiceRenderer['render'](idx);
+                btn.className = `btn btn-sm invoice-receipt-tab-btn${isSelected ? ' active' : ''}`;
+                btn.textContent = `سند ${c.title}`;
+                btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+                btn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  if (selectedCycleIndex !== idx) {
+                    invoiceRenderer['render'](idx);
+                  }
                 });
                 invoiceTabsContainer.appendChild(btn);
               });
 
               const cumBtn = document.createElement('button');
               cumBtn.type = 'button';
-              cumBtn.className = 'btn btn-sm';
-              cumBtn.textContent = 'كشف الحساب الشامل';
               const isCumSelected = (selectedCycleIndex === -1);
-              cumBtn.style.cssText = isCumSelected
-                ? 'background: #4338ca; color: white; font-weight: 800; border: 1px solid #4338ca; border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; cursor: pointer;'
-                : 'background: white; color: #475569; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 14px; font-size: 0.82rem; cursor: pointer;';
-              cumBtn.addEventListener('click', () => {
-                invoiceRenderer['render']('cumulative');
+              cumBtn.className = `btn btn-sm invoice-receipt-tab-btn${isCumSelected ? ' active' : ''}`;
+              cumBtn.textContent = 'كشف الحساب الشامل';
+              cumBtn.setAttribute('aria-pressed', isCumSelected ? 'true' : 'false');
+              cumBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (selectedCycleIndex !== -1) {
+                  invoiceRenderer['render']('cumulative');
+                }
               });
               invoiceTabsContainer.appendChild(cumBtn);
 
@@ -1514,12 +1516,14 @@
                 <div style="display: flex; gap: 16px; align-items: flex-start;">
                   ${activeBrand.logo ? `<img src="${activeBrand.logo}" alt="شعار الفندق" style="width: 52px; height: 52px; border-radius: 8px; object-fit: contain; border: 1px solid #e2e8f0; background: #fff; padding: 2px;">` : ''}
                   <div>
-                    <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? (activeBrand.companyAr || 'مؤسسة مكتب شمس المنازل للخدمات العقارية') : (activeBrand.nameAr || 'ريحانة للوحدات السكنية')}</h2>
+                    <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? (activeBrand.companyAr || activeBrand.nameAr || 'مؤسسة مكتب شمس المنازل للخدمات العقارية') : (activeBrand.nameAr || 'ريحانة للوحدات السكنية')}</h2>
                     <div style="font-size: 0.85rem; color: #64748b; line-height: 1.6;">
                       <div>العنوان: ${escapeHtml(activeBrand.address || 'الخبر - الثقبة')} </div>
                       <div>الرمز البريدي: ${escapeHtml(activeBrand.postalCode || '34625')}</div>
                       <div>هاتف الاستقبال: ${escapeHtml(activeBrand.phone || '0560631783')}</div>
-                      ${isMonthly ? (activeBrand.crNumber && activeBrand.crNumber !== '7038955915' ? `<div>الرقم الموحد: ${escapeHtml(activeBrand.crNumber)}</div>` : '<div>الرقم الموحد: 7038955915</div>') : ''}
+                      ${isMonthly
+                        ? (activeBrand.crNumber ? `<div>الرقم الموحد: ${escapeHtml(activeBrand.crNumber)}</div>` : '<div>الرقم الموحد: 7038955915</div>')
+                        : (activeBrand.vatNumber ? `<div>الرقم الضريبي: ${escapeHtml(activeBrand.vatNumber)}</div>` : '')}
                     </div>
                   </div>
                 </div>
@@ -1662,8 +1666,8 @@
               </div>
 
               <div class="receipt-signature-row ${isMonthly ? 'receipt-signature-monthly' : ''}" dir="rtl">
-                ${isMonthly ? `<div class="receipt-signature-cell"><strong>ختم المؤسسة</strong><img class="receipt-seal" src="${activeBrand.seal || 'assets/seal.svg'}" alt="الختم" onerror="this.style.display='none'"></div>` : ''}
-                <div class="receipt-signature-cell"><strong>توقيع الموظف</strong><div class="receipt-signature-line receipt-staff-signature-line">${isMonthly ? `<img src="${activeBrand.signature || 'assets/signature.svg'}" alt="التوقيع" onerror="this.style.display='none'">` : ''}</div></div>
+                ${isMonthly ? `<div class="receipt-signature-cell"><strong>ختم المؤسسة</strong>${(activeBrand.showSeal !== false && activeBrand.seal) ? `<img class="receipt-seal" src="${activeBrand.seal}" alt="الختم" onerror="this.style.display='none'">` : '<div style="height: 50px; border: 1px dashed #cbd5e1; border-radius: 6px; margin: 4px auto 0; max-width: 130px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 0.75rem;">(ختم يدوي)</div>'}</div>` : ''}
+                <div class="receipt-signature-cell"><strong>توقيع الموظف</strong><div class="receipt-signature-line receipt-staff-signature-line">${(isMonthly && activeBrand.showSignature !== false && activeBrand.signature) ? `<img src="${activeBrand.signature}" alt="التوقيع" onerror="this.style.display='none'">` : ''}</div></div>
                 <div class="receipt-signature-cell receipt-receiver-signature"><strong>${isMonthly ? 'توقيع المستأجر' : 'توقيع المستلم'}</strong><div class="receipt-signature-line"></div><small>بتوقيعي أقر بالاطلاع على الشروط أعلاه والموافقة عليها.</small></div>
               </div>
 
