@@ -449,15 +449,16 @@ tr:hover td {
   position: fixed;
   bottom: 24px;
   left: 24px;
-  z-index: 99999;
+  z-index: var(--z-toast, 9999999) !important;
   display: flex;
   flex-direction: column;
   gap: 10px;
   pointer-events: none;
+  max-width: calc(100vw - 48px);
 }
 
 .toast {
-  pointer-events: auto;
+  pointer-events: auto !important;
   min-width: 300px;
   max-width: 420px;
   padding: 14px 18px;
@@ -467,9 +468,32 @@ tr:hover td {
   display: flex;
   align-items: center;
   gap: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.1);
   animation: slideIn 0.25s ease-out;
   border: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  margin-inline-start: auto;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.toast-close:hover,
+.toast-close:focus-visible {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
 }
 .toast-success { background: #ecfdf3; color: #065f28; border-color: #a7f3c4; }
 .toast-error   { background: #fef2f2; color: #991b1b; border-color: #fecaca; }

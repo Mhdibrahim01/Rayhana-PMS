@@ -538,4 +538,54 @@ module.exports = function registerReservationsIpc(ipcMain, { db, session, helper
       return { success: false, error: err.message };
     }
   });
+
+  // 11. Reservation Companions Handlers
+  ipcMain.handle('reservations:get-companions', async (event, reservationId) => {
+    const denied = requireSession();
+    if (denied) return denied;
+    try {
+      const companions = db.getReservationCompanions(reservationId);
+      return { success: true, data: companions };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('reservations:add-companion', async (event, payload) => {
+    const denied = requireSession();
+    if (denied) return denied;
+    try {
+      const reservationId = payload?.reservationId;
+      const companion = payload?.companion || payload;
+      const newCompanion = db.addReservationCompanion(reservationId, companion);
+      return { success: true, data: newCompanion };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('reservations:update-companion', async (event, payload) => {
+    const denied = requireSession();
+    if (denied) return denied;
+    try {
+      const companionId = payload?.companionId || payload?.id;
+      const companion = payload?.companion || payload;
+      const updated = db.updateReservationCompanion(companionId, companion);
+      return { success: true, data: updated };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('reservations:delete-companion', async (event, arg) => {
+    const denied = requireSession();
+    if (denied) return denied;
+    try {
+      const companionId = (arg && typeof arg === 'object') ? (arg.companionId || arg.id) : arg;
+      const result = db.deleteReservationCompanion(companionId);
+      return result;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
 };

@@ -9,7 +9,7 @@ app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('ignore-gpu-blacklist');
 app.commandLine.appendSwitch('enable-oop-rasterization');
 app.commandLine.appendSwitch('enable-accelerated-video-decode');
-app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,CanvasOopRasterization');
+app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization');
 const path = require('path');
 const fs = require('fs');
 const db = require('./db');
@@ -56,11 +56,33 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
 
   // Initial screen is the master application lock gate
-  mainWindow.loadFile('app-lock.html');
+  mainWindow.loadFile(path.join(__dirname, 'app-lock.html'));
 
+  let isShown = false;
   mainWindow.once('ready-to-show', () => {
+    if (isShown || !mainWindow || mainWindow.isDestroyed()) return;
+    isShown = true;
     mainWindow.maximize();
     mainWindow.show();
+    mainWindow.focus();
+  });
+
+  // Safety fallback: Ensure window is visible even if ready-to-show is delayed
+  setTimeout(() => {
+    if (isShown || !mainWindow || mainWindow.isDestroyed()) return;
+    isShown = true;
+    mainWindow.maximize();
+    mainWindow.show();
+    mainWindow.focus();
+  }, 1500);
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('[Window Load Error]:', errorCode, errorDescription);
+    if (isShown || !mainWindow || mainWindow.isDestroyed()) return;
+    isShown = true;
+    mainWindow.maximize();
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   // Handle keyboard shortcuts (F11 fullscreen toggle & prevent accidental reload in production)
@@ -312,8 +334,13 @@ if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+      }
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
       mainWindow.focus();
     }
   });

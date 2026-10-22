@@ -130,11 +130,15 @@
   --z-sticky-table-head: 10;
   --z-topbar: 20;
   --z-sidebar: 30;
-  --z-modal-backdrop: 1000;
-  --z-modal-dialog: 1010;
-  --z-nested-modal: 1050;
-  --z-confirm-dialog: 1100;
-  --z-toast: 2000;
+  --z-dropdown: 100;
+  --z-titlebar: 9999;
+  --z-command-palette: 10500;
+  --z-modal-backdrop: 100000;
+  --z-modal-dialog: 100010;
+  --z-nested-modal: 100150;
+  --z-confirm-dialog: 999999;
+  --z-highest-overlay: 1100000;
+  --z-toast: 9999999;
 
   /* ── 8. Standard Motion Timings ─────────────────────────────────────────── */
   --motion-fast: 0.12s ease-out;
@@ -554,11 +558,12 @@ textarea.form-control {
   position: fixed;
   bottom: 24px;
   left: 24px;
-  z-index: var(--z-toast);
+  z-index: var(--z-toast, 9999999) !important;
   display: flex;
   flex-direction: column;
   gap: 10px;
   pointer-events: none;
+  max-width: calc(100vw - 48px);
 }
 
 .toast {
@@ -574,9 +579,32 @@ textarea.form-control {
   font-size: 0.88rem;
   font-weight: 700;
   direction: rtl;
-  pointer-events: auto;
+  pointer-events: auto !important;
   border: 1px solid transparent;
   animation: toast-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  margin-inline-start: auto;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.toast-close:hover,
+.toast-close:focus-visible {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .toast-success {
@@ -734,8 +762,23 @@ textarea:focus-visible {
 .topbar input,
 .topbar select,
 .topbar a,
-.no-drag {
-  -webkit-app-region: no-drag;
+.no-drag,
+button,
+input,
+select,
+textarea,
+a,
+[role="button"],
+.btn,
+.modal-backdrop,
+.modal-backdrop *,
+.modal-layout,
+.modal-layout *,
+.modal-dialog,
+.modal-dialog *,
+.swal2-container,
+.swal2-container * {
+  -webkit-app-region: no-drag !important;
 }
 
 /* ── Dedicated Native Window Titlebar Strip (Clean White & Transparent) ── */

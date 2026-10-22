@@ -22,6 +22,8 @@
     "builder": "electron-builder --win",
     "dist": "node scripts/build-dist.js",
     "dist:all": "node scripts/build-dist.js --all",
+    "dist:rayhana": "node scripts/build-dist.js --rayhana",
+    "dist:general": "node scripts/build-dist.js --general",
     "dist:single": "node scripts/build-dist.js --single",
     "dist:builder": "electron-builder --win",
     "pack": "electron-builder --dir"
@@ -69,7 +71,7 @@
       "uninstallerIcon": "icon.ico",
       "installerHeaderIcon": "icon.ico",
       "deleteAppDataOnUninstall": false,
-      "runAfterFinish": true,
+      "runAfterFinish": false,
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "files": [

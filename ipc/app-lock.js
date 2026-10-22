@@ -111,7 +111,7 @@ module.exports = function registerAppLockIpc(ipcMain, { app, session }) {
             height: 32
           });
         }
-        session.mainWindow.loadFile('login.html');
+        session.mainWindow.loadFile(path.join(__dirname, '..', 'login.html'));
       }
       return { success: true };
     }

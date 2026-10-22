@@ -96,16 +96,29 @@
    * Helper for Toast Notifications
    */
   function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    if (!container) {
-      alert(message);
-      return;
+    if (window.DashboardApp?.Helpers?.showToast) {
+      return window.DashboardApp.Helpers.showToast(message, type);
     }
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      document.body.appendChild(container);
+    } else if (container.parentElement !== document.body) {
+      document.body.appendChild(container);
+    }
+    container.style.zIndex = '9999999';
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.textContent = message;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `<span style="flex: 1;">${message}</span><button type="button" class="toast-close" aria-label="إغلاق" title="إغلاق" style="background:none;border:none;cursor:pointer;font-size:16px;color:inherit;padding:0 4px;margin-inline-start:auto;">&times;</button>`;
+    toast.querySelector('.toast-close')?.addEventListener('click', () => {
+      if (toast.isConnected) toast.remove();
+    });
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3500);
+    setTimeout(() => {
+      if (toast.isConnected) toast.remove();
+    }, 3500);
   }
 
   /**

@@ -97,6 +97,7 @@ const RESERVATION_LIST_SQL = `
     r.custom_nightly_price,
     r.monthly_rate_snapshot,
     r.monthly_extension_amount,
+    r.monthly_months_count,
     r.discount_amount,
     r.discount_reason,
     r.late_checkout_fee,
@@ -114,6 +115,8 @@ const RESERVATION_LIST_SQL = `
     g.name AS guest_name,
     g.phone AS guest_phone,
     g.id_number AS guest_id_number,
+    g.nationality AS guest_nationality,
+    (SELECT COUNT(*) FROM reservation_companions rc WHERE rc.reservation_id = r.id) AS companions_count,
     rm.room_number,
     rm.type AS room_type,
     rm.price_per_night,
@@ -215,8 +218,10 @@ function buildReservationListFilter({ search = '', status = 'all', paymentType =
       OR CAST(COALESCE(rm.room_number, '') AS TEXT) LIKE ? ESCAPE '\\'
       OR COALESCE(g.phone, '') LIKE ? ESCAPE '\\'
       OR COALESCE(g.id_number, '') LIKE ? ESCAPE '\\'
+      OR COALESCE(g.nationality, '') LIKE ? ESCAPE '\\'
+      OR EXISTS (SELECT 1 FROM reservation_companions rc WHERE rc.reservation_id = r.id AND (rc.name LIKE ? ESCAPE '\\' OR rc.id_number LIKE ? ESCAPE '\\'))
     )`);
-    params.push(like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like, like);
   }
 
   return {
@@ -359,6 +364,7 @@ function getReservationById(reservationId) {
       r.custom_nightly_price,
       r.monthly_rate_snapshot,
       r.monthly_extension_amount,
+      r.monthly_months_count,
       r.discount_amount,
       r.discount_reason,
       r.late_checkout_fee,
@@ -376,6 +382,7 @@ function getReservationById(reservationId) {
       g.name AS guest_name, 
       g.phone AS guest_phone, 
       g.id_number AS guest_id_number,
+      g.nationality AS guest_nationality,
       rm.room_number, 
       rm.type AS room_type, 
       rm.price_per_night,
@@ -387,6 +394,7 @@ function getReservationById(reservationId) {
   `;
   const res = queryOne(sql, [parseInt(reservationId, 10)]);
   if (res) {
+    res.companions = getReservationCompanions(res.id);
     res.transfers = queryAll(`
       SELECT t.id, t.from_room_id, t.to_room_id, t.segment_start_date, t.segment_end_date,
              t.segment_nights, t.pinned_rate, t.from_rate, t.segment_revenue, t.transfer_mode,
@@ -420,6 +428,9 @@ function createReservation({
   guestName,
   guestPhone,
   guestIdNumber,
+  guestNationality = 'سعودي',
+  guest_nationality,
+  companions = [],
   roomId,
   checkInDate,
   checkOutDate,
@@ -442,6 +453,8 @@ function createReservation({
   is_early_checkin = null,
   actualCheckInAt = null,
   actual_check_in_at = null,
+  monthsCount = null,
+  months_count = null,
   overrideBan = false,
   overrideUsername = null
 }) {
@@ -533,6 +546,7 @@ function createReservation({
   const paid = roundMoney(paidAmount);
   const deposit = roundMoney(depositAmount);
   let monthlyRateSnapshot = null;
+  let stayMonths = 1;
 
   if (paid < 0) {
     throw new Error('المبلغ المدفوع لا يمكن أن يكون سالباً.');
@@ -567,7 +581,19 @@ function createReservation({
     }
     const effectiveRate = normMonthlyPrice !== null ? normMonthlyPrice : roomMonthlyPrice;
     monthlyRateSnapshot = roundMoney(effectiveRate);
-    const baseTotal = monthlyRateSnapshot;
+
+    const rawMonths = monthsCount !== null && monthsCount !== undefined ? monthsCount : months_count;
+    if (rawMonths !== null && rawMonths !== undefined) {
+      stayMonths = Math.max(1, parseInt(rawMonths, 10) || 1);
+    } else if (computedCheckOutDate) {
+      for (let m = 1; m <= 12; m++) {
+        if (getCalendarMonthCheckOut(checkInDate, m) === computedCheckOutDate) {
+          stayMonths = m;
+          break;
+        }
+      }
+    }
+    const baseTotal = roundMoney(monthlyRateSnapshot * stayMonths);
     total = Math.max(0, roundMoney(baseTotal - normDiscountAmount));
 
     // A monthly booking has an authoritative total: flat monthly rate - discount.
@@ -589,8 +615,8 @@ function createReservation({
     }
 
     if (!computedCheckOutDate) {
-      // One full calendar month, clamped at month end, rather than a fixed 30-day span.
-      computedCheckOutDate = getCalendarMonthCheckOut(checkInDate);
+      // One or more full calendar months, clamped at month end.
+      computedCheckOutDate = getCalendarMonthCheckOut(checkInDate, stayMonths);
     } else if (computedCheckOutDate <= checkInDate) {
       throw new Error('تاريخ المغادرة يجب أن يكون بعد تاريخ الوصول بشكل محدد.');
     }
@@ -655,18 +681,23 @@ function createReservation({
 
     let guest = null;
     if (guestIdNumber) {
-      guest = queryOne("SELECT id FROM guests WHERE id_number = ?", [guestIdNumber.trim()]);
+      guest = queryOne("SELECT id, nationality FROM guests WHERE id_number = ?", [guestIdNumber.trim()]);
     }
     if (!guest && guestPhone) {
-      guest = queryOne("SELECT id FROM guests WHERE phone = ?", [guestPhone.trim()]);
+      guest = queryOne("SELECT id, nationality FROM guests WHERE phone = ?", [guestPhone.trim()]);
     }
+
+    const cleanNationality = (guestNationality || guest_nationality || 'سعودي').trim() || 'سعودي';
 
     let guestId;
     if (guest) {
       guestId = guest.id;
+      if (cleanNationality && cleanNationality !== guest.nationality) {
+        db.run("UPDATE guests SET nationality = ? WHERE id = ?", [cleanNationality, guest.id]);
+      }
     } else {
-      const guestStmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
-      guestStmt.run([guestName.trim(), cleanPhone, cleanId]);
+      const guestStmt = db.prepare("INSERT INTO guests (name, phone, id_number, nationality) VALUES (?, ?, ?, ?)");
+      guestStmt.run([guestName.trim(), cleanPhone, cleanId, cleanNationality]);
       guestStmt.free();
       const newGuest = queryOne("SELECT id FROM guests ORDER BY id DESC LIMIT 1");
       guestId = newGuest.id;
@@ -691,14 +722,16 @@ function createReservation({
       }
     }
 
+    const finalStayMonths = normBookingType === 'حجز شهري' ? (stayMonths || 1) : 1;
     const resStmt = db.prepare(`
       INSERT INTO reservations (
         guest_id, room_id, check_in_date, check_out_date,
         total_price, paid_amount, deposit_amount, payment_method, payment_status, status,
         booking_type, custom_nightly_price, monthly_rate_snapshot, monthly_extension_amount,
+        monthly_months_count,
         discount_amount, discount_reason, is_early_checkin, actual_check_in_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مؤكد', ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'مؤكد', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     resStmt.run([
       guestId,
@@ -714,6 +747,7 @@ function createReservation({
       normBookingType === 'حجز شهري' ? null : normCustomNightlyPrice,
       monthlyRateSnapshot,
       0,
+      finalStayMonths,
       normDiscountAmount,
       normDiscountReason,
       finalIsEarlyCheckin,
@@ -723,6 +757,27 @@ function createReservation({
 
     const createdRes = queryOne("SELECT id FROM reservations ORDER BY id DESC LIMIT 1");
     const newReservationId = createdRes.id;
+
+    if (Array.isArray(companions) && companions.length > 0) {
+      const compStmt = db.prepare(`
+        INSERT INTO reservation_companions (
+          reservation_id, name, id_number, nationality, relationship, phone
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      for (const comp of companions) {
+        if (comp && comp.name && String(comp.name).trim()) {
+          compStmt.run([
+            newReservationId,
+            String(comp.name).trim(),
+            (comp.id_number || '').trim(),
+            (comp.nationality || 'سعودي').trim() || 'سعودي',
+            (comp.relationship || '').trim(),
+            (comp.phone || '').trim()
+          ]);
+        }
+      }
+      compStmt.free();
+    }
 
     if (overrideBan) {
       const auditUser = overrideUsername || (userId ? `مستخدم #${userId}` : 'الموظف');
@@ -745,16 +800,24 @@ function createReservation({
     let receiptNumber = null;
     if (paid > 0) {
       receiptNumber = generateReceiptNumber(newReservationId);
+      const isMonthlyBooking = normBookingType === 'حجز شهري';
+      const cleanCheckOut = (computedCheckOutDate && computedCheckOutDate.trim()) ? computedCheckOutDate.trim() : null;
+      const initialNotes = isMonthlyBooking && cleanCheckOut
+        ? `إقامة شهرية (${checkInDate} إلى ${cleanCheckOut})`
+        : 'دفعة الحجز المبدئية عند تسجيل الوصول';
       const payStmt = db.prepare(`
-        INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes)
-        VALUES (?, ?, ?, ?, 'advance_payment', datetime('now', 'localtime'), ?, 'دفعة الحجز المبدئية عند تسجيل الوصول')
+        INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes, period_start_date, period_end_date)
+        VALUES (?, ?, ?, ?, 'advance_payment', datetime('now', 'localtime'), ?, ?, ?, ?)
       `);
       payStmt.run([
         receiptNumber,
         newReservationId,
         paid,
         method,
-        userId ? parseInt(userId, 10) : null
+        userId ? parseInt(userId, 10) : null,
+        initialNotes,
+        isMonthlyBooking ? checkInDate : null,
+        isMonthlyBooking ? cleanCheckOut : null
       ]);
       payStmt.free();
     }
@@ -831,20 +894,25 @@ function countNights(startDate, endDate) {
   const MONTHLY_PACKAGE_NIGHTS = 30;
 
   /**
-   * The checkout date that ends one full calendar month after the given check-in, with
+   * The checkout date that ends one or more full calendar months after the given check-in, with
    * month-end clamping: 2026-07-03 -> 2026-08-03, 2026-01-31 -> 2026-02-28,
    * 2028-01-31 -> 2028-02-29 (leap year). Returns '' for anything unparseable.
    */
-  function getCalendarMonthCheckOut(checkInDateStr) {
+  function getCalendarMonthCheckOut(checkInDateStr, months = 1) {
     const value = String(checkInDateStr || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
+    const numMonths = Math.max(1, parseInt(months, 10) || 1);
     const [y, m, d] = value.split('-').map(Number);
     // m is the 1-based check-in month, so the next month is 0-based index m.
-    const lastDayOfNextMonth = new Date(y, m + 1, 0).getDate();
+    const lastDayOfNextMonth = new Date(y, m + numMonths, 0).getDate();
     const clampedDay = Math.min(d, lastDayOfNextMonth);
     // Let Date roll month index 12 over into January of the following year.
     const nextMonthStart = new Date(y, m, 1);
-    return `${nextMonthStart.getFullYear()}-${String(nextMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+    if (numMonths === 1) {
+      return `${nextMonthStart.getFullYear()}-${String(nextMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+    }
+    const targetMonthStart = new Date(y, m - 1 + numMonths, 1);
+    return `${targetMonthStart.getFullYear()}-${String(targetMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
   }
 
 /**
@@ -1015,10 +1083,12 @@ function computeContractValue(res) {
   }
   const isMonthly = res.booking_type === 'حجز شهري';
   const extensionAmount = isMonthly ? roundMoney(res.monthly_extension_amount || 0) : 0;
+  const initialMonths = Math.max(1, parseInt(res.monthly_months_count, 10) || 1);
+  const singleMonthlyRate = Number(res.monthly_rate_snapshot) > 0 ? Number(res.monthly_rate_snapshot) : MONTHLY_PACKAGE_NIGHTS * storedRate;
   // New monthly records use a flat price snapshot. Old records keep their
   // original 30 x nightly-rate calculation, including after later room edits.
   const base = isMonthly
-    ? roundMoney((Number(res.monthly_rate_snapshot) > 0 ? Number(res.monthly_rate_snapshot) : MONTHLY_PACKAGE_NIGHTS * storedRate) + extensionAmount)
+    ? roundMoney((singleMonthlyRate * initialMonths) + extensionAmount)
     : (res && res.room_id != null
         ? computeStaySegments(res, res.check_out_date).totalBaseCharge
         : roundMoney(bookedNights * storedRate));
@@ -1085,7 +1155,7 @@ function computeCheckoutSettlement(reservationId, {
     SELECT r.id, r.room_id, r.booking_type, r.check_in_date, r.check_out_date, r.total_price, r.paid_amount,
            COALESCE((SELECT SUM(amount) FROM payments WHERE reservation_id = r.id), r.paid_amount) AS ledger_paid_amount,
            r.deposit_amount,
-            r.custom_nightly_price, r.monthly_rate_snapshot, r.monthly_extension_amount,
+            r.custom_nightly_price, r.monthly_rate_snapshot, r.monthly_extension_amount, r.monthly_months_count,
             r.discount_amount, r.discount_reason, r.status,
             rm.room_number, rm.type AS room_type, rm.price_per_night
     FROM reservations r
@@ -1256,7 +1326,7 @@ function checkoutReservation(reservationId, {
            COALESCE((SELECT SUM(amount) FROM payments WHERE reservation_id = r.id), r.paid_amount) AS ledger_paid_amount,
            r.deposit_amount, r.payment_method, r.payment_status, r.booking_type,
            r.check_in_date, r.check_out_date, r.original_calculated_charge, r.status,
-            r.custom_nightly_price, r.monthly_rate_snapshot, r.monthly_extension_amount,
+            r.custom_nightly_price, r.monthly_rate_snapshot, r.monthly_extension_amount, r.monthly_months_count,
             r.discount_amount, r.discount_reason,
            r.checkout_policy, r.checkout_policy_reason, r.booked_check_out_date,
            rm.room_number, rm.type AS room_type, rm.price_per_night
@@ -1779,12 +1849,22 @@ function extendReservation({
     ? Math.max(0, roundMoney(discountAmount))
     : 0;
 
+  let extMonths = 0;
+  if (isMonthly && monthlyRate > 0) {
+    for (let m = 1; m <= 12; m++) {
+      if (cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut, m)) {
+        extMonths = m;
+        break;
+      }
+    }
+  }
+
   let baseCost;
   if (isMonthly && monthlyRate > 0) {
-    if (cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut)) {
+    if (extMonths > 0) {
       baseCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)))
         ? roundMoney(additionalCost)
-        : monthlyRate;
+        : roundMoney(extMonths * monthlyRate);
     } else if (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost))) {
       baseCost = roundMoney(additionalCost);
     } else {
@@ -1795,7 +1875,7 @@ function extendReservation({
   }
 
   const calculatedCost = Math.max(0, roundMoney(baseCost - normDiscountAmount));
-  const calcAdditionalCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)) && (!isMonthly || cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut)))
+  const calcAdditionalCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)) && (!isMonthly || extMonths > 0))
     ? roundMoney(additionalCost)
     : calculatedCost;
 
@@ -1842,9 +1922,12 @@ function extendReservation({
     if (payAmount > 0) {
       newPaid = roundMoney(currentPaid + payAmount);
       receiptNumber = generateReceiptNumber(targetId);
+      const defaultNotes = isMonthly
+        ? `إقامة شهرية (${oldCheckOut} إلى ${cleanNewCheckOut})`
+        : 'سداد دفعة إقامة';
       const payStmt = db.prepare(`
-        INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes)
-        VALUES (?, ?, ?, ?, 'extension_payment', datetime('now', 'localtime'), ?, ?)
+        INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes, period_start_date, period_end_date)
+        VALUES (?, ?, ?, ?, 'extension_payment', datetime('now', 'localtime'), ?, ?, ?, ?)
       `);
       payStmt.run([
         receiptNumber,
@@ -1852,7 +1935,9 @@ function extendReservation({
         payAmount,
         paymentMethod || 'نقداً',
         userId ? parseInt(userId, 10) : null,
-        notes || 'سداد دفعة تمديد إقامة'
+        notes || defaultNotes,
+        oldCheckOut,
+        cleanNewCheckOut
       ]);
       payStmt.free();
     }
@@ -1907,7 +1992,11 @@ function extendReservation({
       discountAmount: normDiscountAmount,
       additionalCost: calcAdditionalCost,
       paidAmount: payAmount,
-      receiptNumber
+      receiptNumber,
+      isMonthly,
+      periodStartDate: oldCheckOut,
+      periodEndDate: cleanNewCheckOut,
+      cycleCost: calcAdditionalCost
     };
   } catch (err) {
     try { db.run("ROLLBACK;"); } catch (rbErr) {}
@@ -2323,6 +2412,8 @@ function getReservationPayments(reservationId) {
       p.created_at,
       p.business_date,
       p.notes,
+      p.period_start_date,
+      p.period_end_date,
       p.user_id,
       u.username AS staff_username
     FROM payments p
@@ -2363,16 +2454,22 @@ function getPaymentReceipt(receiptIdentifier) {
       p.created_at,
       p.business_date,
       p.notes,
+      p.period_start_date,
+      p.period_end_date,
       r.total_price,
       r.paid_amount,
       r.payment_status,
       r.check_in_date,
       r.check_out_date,
+      r.booking_type,
+      r.monthly_rate_snapshot,
       g.name AS guest_name,
       g.phone AS guest_phone,
       g.id_number AS guest_id_number,
       rm.room_number,
       rm.type AS room_type,
+      rm.monthly_price,
+      rm.price_per_night,
       u.username AS staff_username
     FROM payments p
     JOIN reservations r ON p.reservation_id = r.id
@@ -2476,6 +2573,8 @@ function updateReservationReceipt({
   guestName,
   guestPhone,
   guestIdNumber,
+  guestNationality,
+  guest_nationality,
   discountAmount,
   discountReason,
   customNightlyPrice,
@@ -2638,26 +2737,28 @@ function updateReservationReceipt({
 
     // 3. Update guest information if changed
     if (res.guest_id) {
-      const currentGuest = queryOne("SELECT name, phone, id_number FROM guests WHERE id = ?", [res.guest_id]);
+      const currentGuest = queryOne("SELECT name, phone, id_number, nationality FROM guests WHERE id = ?", [res.guest_id]);
       if (currentGuest) {
         const newName = (guestName && guestName.trim()) ? guestName.trim() : currentGuest.name;
         const newPhone = cleanPhone || currentGuest.phone;
         const newId = cleanId || currentGuest.id_number;
-        const guestChanged = newName !== currentGuest.name || newPhone !== currentGuest.phone || newId !== currentGuest.id_number;
+        const rawNat = (guestNationality || guest_nationality);
+        const newNat = (rawNat !== undefined && rawNat !== null && String(rawNat).trim()) ? String(rawNat).trim() : (currentGuest.nationality || 'سعودي');
+        const guestChanged = newName !== currentGuest.name || newPhone !== currentGuest.phone || newId !== currentGuest.id_number || newNat !== currentGuest.nationality;
         if (guestChanged) {
           const usageCount = queryOne("SELECT COUNT(*) AS count FROM reservations WHERE guest_id = ?", [res.guest_id])?.count || 0;
           if (usageCount > 1) {
             // Fork guest record for this reservation so older reservations maintain historical integrity
-            const newGuestStmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
-            newGuestStmt.run([newName, newPhone, newId]);
+            const newGuestStmt = db.prepare("INSERT INTO guests (name, phone, id_number, nationality) VALUES (?, ?, ?, ?)");
+            newGuestStmt.run([newName, newPhone, newId, newNat]);
             newGuestStmt.free();
             const newGuestId = queryOne("SELECT last_insert_rowid() AS id").id;
             const updateResGuest = db.prepare("UPDATE reservations SET guest_id = ? WHERE id = ?");
             updateResGuest.run([newGuestId, targetId]);
             updateResGuest.free();
           } else {
-            const updateGuestStmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ? WHERE id = ?");
-            updateGuestStmt.run([newName, newPhone, newId, res.guest_id]);
+            const updateGuestStmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ?, nationality = ? WHERE id = ?");
+            updateGuestStmt.run([newName, newPhone, newId, newNat, res.guest_id]);
             updateGuestStmt.free();
           }
         }
@@ -3323,6 +3424,130 @@ function executeRoomTransfer({
   };
 }
 
+/**
+ * Reservation Companions Management
+ */
+function getReservationCompanions(reservationId) {
+  const targetId = parseInt(reservationId, 10);
+  if (!targetId || isNaN(targetId)) return [];
+  return queryAll(`
+    SELECT id, reservation_id, name, id_number, nationality, relationship, phone, created_at
+    FROM reservation_companions
+    WHERE reservation_id = ?
+    ORDER BY id ASC
+  `, [targetId]);
+}
+
+function addReservationCompanion(arg1, arg2) {
+  let reservationId;
+  let companionData;
+  if (typeof arg1 === 'object' && arg1 !== null && arg1.reservationId !== undefined) {
+    reservationId = arg1.reservationId;
+    companionData = arg1;
+  } else {
+    reservationId = arg1;
+    companionData = arg2 || {};
+  }
+
+  const { name, id_number = '', nationality = 'سعودي', relationship = '', phone = '' } = companionData;
+  const targetId = parseInt(reservationId, 10);
+  if (!targetId || isNaN(targetId)) throw new Error('معرف الحجز غير صالح.');
+
+  const res = queryOne("SELECT id FROM reservations WHERE id = ?", [targetId]);
+  if (!res) throw new Error('الحجز غير موجود.');
+
+  if (!name || !name.trim()) throw new Error('اسم المرافق مطلوب ولا يمكن تركه فارغاً.');
+
+  const cleanName = name.trim();
+  const cleanId = (id_number || '').trim();
+  const cleanNat = (nationality || 'سعودي').trim() || 'سعودي';
+  const cleanRel = (relationship || '').trim();
+  const cleanPhone = (phone || '').trim();
+
+  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
+    throw new Error('رقم جوال المرافق غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.');
+  }
+  if (cleanId && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(cleanId)) {
+    throw new Error('رقم هوية المرافق (10 أرقام) أو جواز السفر (6 إلى 9 خانات) غير صحيح.');
+  }
+
+  const stmt = db.prepare(`
+    INSERT INTO reservation_companions (
+      reservation_id, name, id_number, nationality, relationship, phone
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run([targetId, cleanName, cleanId, cleanNat, cleanRel, cleanPhone]);
+  stmt.free();
+  saveToFile();
+
+  return queryOne("SELECT * FROM reservation_companions ORDER BY id DESC LIMIT 1");
+}
+
+function updateReservationCompanion(arg1, arg2) {
+  let companionId;
+  let companionData;
+  if (typeof arg1 === 'object' && arg1 !== null && (arg1.companionId !== undefined || arg1.id !== undefined)) {
+    companionId = arg1.companionId !== undefined ? arg1.companionId : arg1.id;
+    companionData = arg1;
+  } else {
+    companionId = arg1;
+    companionData = arg2 || {};
+  }
+
+  const { name, id_number = '', nationality = 'سعودي', relationship = '', phone = '' } = companionData;
+  const targetId = parseInt(companionId, 10);
+  if (!targetId || isNaN(targetId)) throw new Error('معرف المرافق غير صالح.');
+
+  const existing = queryOne("SELECT id FROM reservation_companions WHERE id = ?", [targetId]);
+  if (!existing) throw new Error('سجل المرافق غير موجود.');
+
+  if (!name || !name.trim()) throw new Error('اسم المرافق مطلوب ولا يمكن تركه فارغاً.');
+
+  const cleanName = name.trim();
+  const cleanId = (id_number || '').trim();
+  const cleanNat = (nationality || 'سعودي').trim() || 'سعودي';
+  const cleanRel = (relationship || '').trim();
+  const cleanPhone = (phone || '').trim();
+
+  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
+    throw new Error('رقم جوال المرافق غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.');
+  }
+  if (cleanId && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(cleanId)) {
+    throw new Error('رقم هوية المرافق (10 أرقام) أو جواز السفر (6 إلى 9 خانات) غير صحيح.');
+  }
+
+  const stmt = db.prepare(`
+    UPDATE reservation_companions
+    SET name = ?, id_number = ?, nationality = ?, relationship = ?, phone = ?
+    WHERE id = ?
+  `);
+  stmt.run([cleanName, cleanId, cleanNat, cleanRel, cleanPhone, targetId]);
+  stmt.free();
+  saveToFile();
+
+  return queryOne("SELECT * FROM reservation_companions WHERE id = ?", [targetId]);
+}
+
+function deleteReservationCompanion(arg1) {
+  let companionId;
+  if (typeof arg1 === 'object' && arg1 !== null && (arg1.companionId !== undefined || arg1.id !== undefined)) {
+    companionId = arg1.companionId !== undefined ? arg1.companionId : arg1.id;
+  } else {
+    companionId = arg1;
+  }
+
+  const targetId = parseInt(companionId, 10);
+  if (!targetId || isNaN(targetId)) throw new Error('معرف المرافق غير صالح.');
+
+  const existing = queryOne("SELECT id, reservation_id FROM reservation_companions WHERE id = ?", [targetId]);
+  if (!existing) throw new Error('سجل المرافق غير موجود.');
+
+  db.run("DELETE FROM reservation_companions WHERE id = ?", [targetId]);
+  saveToFile();
+
+  return { success: true, reservationId: existing.reservation_id, deleted: true };
+}
+
 module.exports = {
   getAllReservations,
   getReservationsPage,
@@ -3347,5 +3572,9 @@ module.exports = {
   previewRoomTransfer,
   executeRoomTransfer,
   validateTransferEligibility,
-  computeStaySegments
+  computeStaySegments,
+  getReservationCompanions,
+  addReservationCompanion,
+  updateReservationCompanion,
+  deleteReservationCompanion
 };

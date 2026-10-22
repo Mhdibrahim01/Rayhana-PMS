@@ -11,13 +11,17 @@ test('guest validation, imports, bans, search, and pagination', async t => {
     let secondGuest;
 
     await t.test('phone and identity validation reject invalid data and duplicate identities', () => {
-      firstGuest = db.addCustomer({ name: 'ضيف عربي للاختبار', phone: '0500000401', id_number: '1000000401' });
-      secondGuest = db.addCustomer({ name: 'English Guest', phone: '0500000402', id_number: '1000000402' });
+      firstGuest = db.addCustomer({ name: 'ضيف عربي للاختبار', nationality: 'سعودي', phone: '0500000401', id_number: '1000000401' });
+      secondGuest = db.addCustomer({ name: 'English Guest', nationality: 'بريطاني', phone: '0500000402', id_number: '1000000402' });
       assert.equal(firstGuest.phone, '0500000401');
+      assert.equal(firstGuest.nationality, 'سعودي');
+      assert.equal(secondGuest.nationality, 'بريطاني');
       assert.throws(() => db.addCustomer({ name: 'Bad Phone', phone: '123', id_number: '1000000403' }), /رقم الجوال غير صحيح/);
       assert.throws(() => db.addCustomer({ name: 'Bad ID', phone: '0500000403', id_number: '123' }), /رقم الهوية الوطنية/);
       assert.throws(() => db.addCustomer({ name: 'Duplicate ID', phone: '0500000404', id_number: '1000000401' }), /مسجل مسبقاً/);
       assert.throws(() => db.updateGuest(secondGuest.id, { name: 'Duplicate Phone', phone: firstGuest.phone, id_number: '1000000402' }), /رقم الجوال .* مسجل مسبقاً/);
+      db.updateGuest(firstGuest.id, { name: 'ضيف عربي محدث', nationality: 'كويتي', phone: firstGuest.phone, id_number: '1000000401' });
+      assert.equal(db.findGuestByPhoneOrId(firstGuest.phone).nationality, 'كويتي');
       assertDatabaseIntegrity(connection, 'guest validation');
     });
 
@@ -34,17 +38,20 @@ test('guest validation, imports, bans, search, and pagination', async t => {
 
     await t.test('bulk import recognizes English and Arabic headers and normalizes +966 phones', () => {
       const imported = db.bulkImportGuests([
-        { Name: 'English Bulk Guest', Phone: '+966500009001', id_number: '1000000901' },
-        { 'اسم النزيل': 'ضيف الاستيراد العربي', 'رقم الجوال': '00966500009002', 'رقم الهوية': '1000000902' },
+        { Name: 'English Bulk Guest', Nationality: 'بريطاني', Phone: '+966500009001', id_number: '1000000901' },
+        { 'اسم النزيل': 'ضيف الاستيراد العربي', 'الجنسية': 'مصري', 'رقم الجوال': '00966500009002', 'رقم الهوية': '1000000902' },
         { name: '', phone: '+966500009003' }
       ]);
       assert.equal(imported.inserted, 2);
       assert.equal(imported.skipped, 1);
       assert.equal(db.findGuestByPhoneOrId('0500009001').name, 'English Bulk Guest');
+      assert.equal(db.findGuestByPhoneOrId('0500009001').nationality, 'بريطاني');
       assert.equal(db.findGuestByPhoneOrId('0500009002').name, 'ضيف الاستيراد العربي');
-      const updated = db.bulkImportGuests([{ Name: 'English Bulk Updated', Phone: '+966500009001', id_number: '1000000901' }]);
+      assert.equal(db.findGuestByPhoneOrId('0500009002').nationality, 'مصري');
+      const updated = db.bulkImportGuests([{ Name: 'English Bulk Updated', Nationality: 'أمريكي', Phone: '+966500009001', id_number: '1000000901' }]);
       assert.equal(updated.updated, 1);
       assert.equal(db.findGuestByPhoneOrId('1000000901').name, 'English Bulk Updated');
+      assert.equal(db.findGuestByPhoneOrId('1000000901').nationality, 'أمريكي');
       assertDatabaseIntegrity(connection, 'guest bulk import normalization');
     });
 

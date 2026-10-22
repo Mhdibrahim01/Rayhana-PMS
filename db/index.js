@@ -92,6 +92,10 @@ module.exports = {
   executeRoomTransfer: reservations.executeRoomTransfer,
   validateTransferEligibility: reservations.validateTransferEligibility,
   computeStaySegments: reservations.computeStaySegments,
+  getReservationCompanions: reservations.getReservationCompanions,
+  addReservationCompanion: reservations.addReservationCompanion,
+  updateReservationCompanion: reservations.updateReservationCompanion,
+  deleteReservationCompanion: reservations.deleteReservationCompanion,
 
   // reports
   getTodayCheckouts: reports.getTodayCheckouts,

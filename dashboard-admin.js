@@ -84,6 +84,10 @@
     }
   }
 
+  let pendingLogoDataUrl = null;
+  let pendingSealDataUrl = null;
+  let pendingSignatureDataUrl = null;
+
   function updateBrandPreviewAndInputs(brand) {
     if (!brand) return;
     const logoEl = document.getElementById('brand-preview-logo');
@@ -92,11 +96,20 @@
     const sealEl = document.getElementById('brand-preview-seal');
     const sigEl = document.getElementById('brand-preview-signature');
 
+    pendingLogoDataUrl = null;
+    pendingSealDataUrl = null;
+    pendingSignatureDataUrl = null;
+
     if (logoEl && brand.logo) logoEl.src = brand.logo;
     if (nameEl && brand.nameAr) nameEl.textContent = brand.nameAr;
     if (compEl && brand.companyAr) compEl.textContent = brand.companyAr;
-    if (sealEl && brand.seal) sealEl.src = brand.seal;
-    if (sigEl && brand.signature) sigEl.src = brand.signature;
+    if (sealEl) sealEl.src = brand.seal || '';
+    if (sigEl) sigEl.src = brand.signature || '';
+
+    const toggleSeal = document.getElementById('brand-toggle-seal');
+    if (toggleSeal) toggleSeal.checked = (brand.showSeal !== false);
+    const toggleSig = document.getElementById('brand-toggle-signature');
+    if (toggleSig) toggleSig.checked = (brand.showSignature !== false);
 
     const inNameAr = document.getElementById('brand-edit-name-ar');
     const inNameEn = document.getElementById('brand-edit-name-en');
@@ -544,6 +557,77 @@
     });
   }
 
+  // Wire up logo, seal, and signature upload controls
+  const inputLogo = document.getElementById('input-brand-logo');
+  const btnUploadLogo = document.getElementById('btn-upload-logo');
+  if (btnUploadLogo && inputLogo) {
+    btnUploadLogo.addEventListener('click', () => inputLogo.click());
+    inputLogo.addEventListener('change', () => {
+      const file = inputLogo.files && inputLogo.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.addEventListener('load', (e) => {
+          pendingLogoDataUrl = e.target.result;
+          const img = document.getElementById('brand-preview-logo');
+          if (img) img.src = pendingLogoDataUrl;
+        });
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  const inputSeal = document.getElementById('input-brand-seal');
+  const btnUploadSeal = document.getElementById('btn-upload-seal');
+  const btnClearSeal = document.getElementById('btn-clear-seal');
+  if (btnUploadSeal && inputSeal) {
+    btnUploadSeal.addEventListener('click', () => inputSeal.click());
+    inputSeal.addEventListener('change', () => {
+      const file = inputSeal.files && inputSeal.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.addEventListener('load', (e) => {
+          pendingSealDataUrl = e.target.result;
+          const img = document.getElementById('brand-preview-seal');
+          if (img) img.src = pendingSealDataUrl;
+        });
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+  if (btnClearSeal) {
+    btnClearSeal.addEventListener('click', () => {
+      pendingSealDataUrl = '';
+      const img = document.getElementById('brand-preview-seal');
+      if (img) img.src = '';
+    });
+  }
+
+  const inputSig = document.getElementById('input-brand-signature');
+  const btnUploadSig = document.getElementById('btn-upload-signature');
+  const btnClearSig = document.getElementById('btn-clear-signature');
+  if (btnUploadSig && inputSig) {
+    btnUploadSig.addEventListener('click', () => inputSig.click());
+    inputSig.addEventListener('change', () => {
+      const file = inputSig.files && inputSig.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.addEventListener('load', (e) => {
+          pendingSignatureDataUrl = e.target.result;
+          const img = document.getElementById('brand-preview-signature');
+          if (img) img.src = pendingSignatureDataUrl;
+        });
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+  if (btnClearSig) {
+    btnClearSig.addEventListener('click', () => {
+      pendingSignatureDataUrl = '';
+      const img = document.getElementById('brand-preview-signature');
+      if (img) img.src = '';
+    });
+  }
+
   const brandProfileForm = document.getElementById('brand-profile-edit-form');
   if (brandProfileForm) {
     brandProfileForm.addEventListener('submit', async (e) => {
@@ -561,8 +645,14 @@
         vatNumber: document.getElementById('brand-edit-vat')?.value?.trim(),
         phone: document.getElementById('brand-edit-phone')?.value?.trim(),
         address: document.getElementById('brand-edit-address')?.value?.trim(),
-        postalCode: document.getElementById('brand-edit-postal')?.value?.trim()
+        postalCode: document.getElementById('brand-edit-postal')?.value?.trim(),
+        showSeal: Boolean(document.getElementById('brand-toggle-seal')?.checked),
+        showSignature: Boolean(document.getElementById('brand-toggle-signature')?.checked)
       };
+
+      if (pendingLogoDataUrl !== null) profile.logo = pendingLogoDataUrl;
+      if (pendingSealDataUrl !== null) profile.seal = pendingSealDataUrl;
+      if (pendingSignatureDataUrl !== null) profile.signature = pendingSignatureDataUrl;
 
       const btnSave = document.getElementById('btn-save-brand-profile');
       if (btnSave) btnSave.disabled = true;
@@ -577,7 +667,7 @@
           }
           const updatedBrand = (res.brands && res.brands[selectedId]) || res.current;
           updateBrandPreviewAndInputs(updatedBrand);
-          App.Helpers.showToast('تم حفظ بيانات المنشأة بنجاح!', 'success');
+          App.Helpers.showToast('تم حفظ بيانات المنشأة والأختام بنجاح!', 'success');
         } else {
           App.Helpers.showToast(res?.error || 'فشل حفظ بيانات المنشأة.', 'error');
         }

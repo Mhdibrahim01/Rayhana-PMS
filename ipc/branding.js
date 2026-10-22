@@ -30,61 +30,29 @@ const DEFAULT_BRANDING = {
       accentColor: '#f59e0b',
       logo: 'assets/brands/hotel_1/logo.png',
       seal: 'assets/brands/hotel_1/seal.svg',
-      signature: 'assets/brands/hotel_1/signature.svg'
+      signature: 'assets/brands/hotel_1/signature.svg',
+      showSeal: true,
+      showSignature: true
     },
-    hotel_2: {
-      id: 'hotel_2',
-      nameAr: 'أجنحة المنار الفندقية',
-      nameEn: 'Al-Manar Hotel Suites',
-      companyAr: 'مؤسسة المنار للضيافة الفندقية',
-      subtitle: 'أجنحة فندقية مفروشة وخدمات راقية',
-      crNumber: '7021489632',
-      vatNumber: '310987654300003',
-      address: 'الرياض - حي الملز',
-      postalCode: '12836',
-      phone: '0501234567',
-      invoiceHeader: 'فاتورة ضريبية - أجنحة المنار الفندقية',
-      primaryColor: '#0d7a5f',
-      accentColor: '#d97706',
-      logo: 'assets/brands/hotel_2/logo.png',
-      seal: 'assets/brands/hotel_2/seal.svg',
-      signature: 'assets/brands/hotel_2/signature.svg'
-    },
-    hotel_3: {
-      id: 'hotel_3',
-      nameAr: 'دار الضيافة للشقق المخدومة',
-      nameEn: 'Dar Al-Diyafa Serviced Apartments',
-      companyAr: 'شركة دار الضيافة للإيواء السياحي',
-      subtitle: 'شقق مخدومة وإقامة استثنائية',
-      crNumber: '7045981240',
-      vatNumber: '311876543200003',
-      address: 'جدة - حي الحمراء',
-      postalCode: '23212',
-      phone: '0559876543',
-      invoiceHeader: 'فاتورة ضريبية - دار الضيافة للشقق المخدومة',
-      primaryColor: '#7b1842',
-      accentColor: '#eab308',
-      logo: 'assets/brands/hotel_3/logo.png',
-      seal: 'assets/brands/hotel_3/seal.svg',
-      signature: 'assets/brands/hotel_3/signature.svg'
-    },
-    hotel_4: {
-      id: 'hotel_4',
-      nameAr: 'أبراج الواحة للشقق الفندقية',
-      nameEn: 'Al-Waha Towers Hotel Apartments',
-      companyAr: 'مؤسسة أبراج الواحة للتشغيل الفندقي',
-      subtitle: 'أبراج فندقية بإطلالات مميزة وخدمة متكاملة',
-      crNumber: '7056891234',
-      vatNumber: '312987654300003',
-      address: 'الدمام - حي الشاطئ',
-      postalCode: '32415',
-      phone: '0543210987',
-      invoiceHeader: 'فاتورة ضريبية - أبراج الواحة للشقق الفندقية',
-      primaryColor: '#c2410c',
+    general: {
+      id: 'general',
+      nameAr: 'نظام إدارة الإيواء والوحدات العقارية',
+      nameEn: 'Property & Hospitality ERP',
+      companyAr: 'مكتب الخدمات العقارية وإدارة الأملاك',
+      subtitle: 'إدارة الحجوزات والوحدات السكنية والعقارية',
+      crNumber: '7000000000',
+      vatNumber: '300000000000003',
+      address: 'المملكة العربية السعودية',
+      postalCode: '10000',
+      phone: '0500000000',
+      invoiceHeader: 'فاتورة ضريبية',
+      primaryColor: '#1e3a8a',
       accentColor: '#f59e0b',
-      logo: 'assets/brands/hotel_4/logo.png',
-      seal: 'assets/brands/hotel_4/seal.svg',
-      signature: 'assets/brands/hotel_4/signature.svg'
+      logo: 'assets/brands/general/logo.png',
+      seal: 'assets/brands/general/seal.svg',
+      signature: 'assets/brands/general/signature.svg',
+      showSeal: true,
+      showSignature: true
     }
   }
 };
@@ -97,30 +65,52 @@ function readBrandingConfigFromDisk(app) {
     } catch (_) {}
   }
 
+  let baseConfig = null;
+  try {
+    if (fs.existsSync(BRANDING_FILE_PATH)) {
+      const raw = fs.readFileSync(BRANDING_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.brands && parsed.activeBrand && parsed.brands[parsed.activeBrand]) {
+        baseConfig = parsed;
+      }
+    }
+  } catch (err) {
+    console.error('[Branding] Failed to read bundled config:', err.message);
+  }
+
+  if (!baseConfig || !baseConfig.brands) {
+    baseConfig = JSON.parse(JSON.stringify(DEFAULT_BRANDING));
+  }
+
   if (userPath && fs.existsSync(userPath)) {
     try {
       const raw = fs.readFileSync(userPath, 'utf8');
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.brands && parsed.activeBrand && parsed.brands[parsed.activeBrand]) {
-        return parsed;
+      // Validate that cached activeBrand actually exists in baseConfig
+      if (parsed && parsed.activeBrand && baseConfig.brands[parsed.activeBrand]) {
+        for (const brandId of Object.keys(baseConfig.brands)) {
+          if (parsed.brands && parsed.brands[brandId]) {
+            baseConfig.brands[brandId] = Object.assign({}, baseConfig.brands[brandId], parsed.brands[brandId]);
+          }
+        }
+        baseConfig.activeBrand = parsed.activeBrand;
+        if (typeof parsed.hideBrandSwitcherInExe === 'boolean') {
+          baseConfig.hideBrandSwitcherInExe = parsed.hideBrandSwitcherInExe;
+        }
+        return baseConfig;
+      } else {
+        // Obsolete or non-existent brand cached in userData (e.g. deleted demo hotel_2)!
+        // Clean up userData file so stale cache does not linger
+        try {
+          fs.writeFileSync(userPath, JSON.stringify(baseConfig, null, 2), 'utf8');
+        } catch (_) {}
       }
     } catch (err) {
       console.warn('[Branding] Failed reading userData config:', err.message);
     }
   }
 
-  try {
-    if (fs.existsSync(BRANDING_FILE_PATH)) {
-      const raw = fs.readFileSync(BRANDING_FILE_PATH, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.brands && parsed.activeBrand && parsed.brands[parsed.activeBrand]) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.error('[Branding] Failed to read config from disk, falling back to default:', err.message);
-  }
-  return JSON.parse(JSON.stringify(DEFAULT_BRANDING));
+  return baseConfig;
 }
 
 function writeBrandingConfigToDisk(config, app) {

@@ -15,9 +15,8 @@ test('Multi-Brand Configuration & Profiles Integrity', async (t) => {
 
     assert.ok(config.brands, 'config.brands must exist');
     assert.ok(config.brands.hotel_1, 'hotel_1 must exist');
-    assert.ok(config.brands.hotel_2, 'hotel_2 must exist');
-    assert.ok(config.brands.hotel_3, 'hotel_3 must exist');
-    assert.ok(config.brands.hotel_4, 'hotel_4 must exist');
+    assert.ok(config.brands.general, 'general brand must exist');
+    assert.equal(Object.keys(config.brands).length, 2, 'Must have exactly the two core editions');
     assert.ok(Object.keys(config.brands).includes(config.activeBrand), 'activeBrand must be valid');
   });
 
@@ -53,15 +52,11 @@ test('Multi-Brand Configuration & Profiles Integrity', async (t) => {
   await t.test('distinct properties between brands', () => {
     const config = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
     const h1 = config.brands.hotel_1;
-    const h2 = config.brands.hotel_2;
-    const h3 = config.brands.hotel_3;
+    const gen = config.brands.general;
 
-    assert.notEqual(h1.nameAr, h2.nameAr);
-    assert.notEqual(h2.nameAr, h3.nameAr);
-    assert.notEqual(h1.crNumber, h2.crNumber);
-    assert.notEqual(h2.crNumber, h3.crNumber);
-    assert.notEqual(h1.seal, h2.seal);
-    assert.notEqual(h2.seal, h3.seal);
+    assert.notEqual(h1.nameAr, gen.nameAr);
+    assert.notEqual(h1.crNumber, gen.crNumber);
+    assert.notEqual(h1.seal, gen.seal);
   });
 });
 
@@ -98,14 +93,14 @@ test('Multi-Brand IPC Handlers & Access Control', async (t) => {
 
   await t.test('non-Admin role cannot switch active brand', async () => {
     session.currentUser = { id: 2, username: 'receptionist', role: 'User' };
-    const res = await fakeIpc.invoke('brand:set-active', {}, 'hotel_2');
+    const res = await fakeIpc.invoke('brand:set-active', {}, 'general');
     assert.equal(res.success, false);
     assert.match(res.error, /غير مصرح/);
   });
 
   await t.test('non-Admin role cannot update brand profile', async () => {
     session.currentUser = { id: 2, username: 'receptionist', role: 'User' };
-    const res = await fakeIpc.invoke('brand:update-profile', {}, { brandId: 'hotel_2', profile: { phone: '0599999999' } });
+    const res = await fakeIpc.invoke('brand:update-profile', {}, { brandId: 'general', profile: { phone: '0599999999' } });
     assert.equal(res.success, false);
     assert.match(res.error, /غير مصرح/);
   });
@@ -115,18 +110,42 @@ test('Multi-Brand IPC Handlers & Access Control', async (t) => {
     const originalConfig = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
 
     try {
-      const switchRes = await fakeIpc.invoke('brand:set-active', {}, 'hotel_2');
+      const switchRes = await fakeIpc.invoke('brand:set-active', {}, 'general');
       assert.equal(switchRes.success, true);
-      assert.equal(switchRes.activeBrandId, 'hotel_2');
+      assert.equal(switchRes.activeBrandId, 'general');
 
       const updateRes = await fakeIpc.invoke('brand:update-profile', {}, {
-        brandId: 'hotel_2',
+        brandId: 'general',
         profile: { phone: '0500000002' }
       });
       assert.equal(updateRes.success, true);
-      assert.equal(updateRes.brands.hotel_2.phone, '0500000002');
+      assert.equal(updateRes.brands.general.phone, '0500000002');
     } finally {
       // Restore original config
+      fs.writeFileSync(BRANDING_PATH, JSON.stringify(originalConfig, null, 2), 'utf8');
+    }
+  });
+
+  await t.test('Admin role can update general brand profile including showSeal and showSignature toggles', async () => {
+    session.currentUser = { id: 1, username: 'admin', role: 'Admin' };
+    const originalConfig = JSON.parse(fs.readFileSync(BRANDING_PATH, 'utf8'));
+
+    try {
+      const updateRes = await fakeIpc.invoke('brand:update-profile', {}, {
+        brandId: 'general',
+        profile: {
+          nameAr: 'مكتب الاختبار العام',
+          companyAr: 'مؤسسة الاختبار العقاري',
+          showSeal: false,
+          showSignature: false
+        }
+      });
+      assert.equal(updateRes.success, true);
+      assert.equal(updateRes.brands.general.nameAr, 'مكتب الاختبار العام');
+      assert.equal(updateRes.brands.general.companyAr, 'مؤسسة الاختبار العقاري');
+      assert.equal(updateRes.brands.general.showSeal, false);
+      assert.equal(updateRes.brands.general.showSignature, false);
+    } finally {
       fs.writeFileSync(BRANDING_PATH, JSON.stringify(originalConfig, null, 2), 'utf8');
     }
   });
@@ -149,7 +168,7 @@ test('Multi-Brand IPC Handlers & Access Control', async (t) => {
       assert.ok(cfg.brands[cfg.activeBrandId]);
 
       // Switching is blocked in packaged mode
-      const switchAttempt = await packagedIpc.invoke('brand:set-active', {}, 'hotel_3');
+      const switchAttempt = await packagedIpc.invoke('brand:set-active', {}, 'general');
       assert.equal(switchAttempt.success, false);
       assert.match(switchAttempt.error, /غير مصرح/);
 
