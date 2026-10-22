@@ -183,7 +183,7 @@ function createGuest(name, serial) {
   return guest.id;
 }
 
-function createReservation({ guestId, roomId, checkIn, checkOut, total, paid = 0, deposit = 0, method = 'نقداً', bookingType = 'عادي', rate = null, discount = 0, statusLabel }) {
+function createReservation({ guestId, roomId, checkIn, checkOut, total, paid = 0, deposit = 0, method = 'نقداً', bookingType = 'عادي', rate = null, monthlyPrice = null, discount = 0, statusLabel }) {
   const guest = sqlAll('SELECT id, name, phone, id_number FROM guests WHERE id = ?', [guestId])[0];
   const result = appDb.createReservation({
     guestName: guest.name,
@@ -197,6 +197,7 @@ function createReservation({ guestId, roomId, checkIn, checkOut, total, paid = 0
     depositAmount: deposit,
     paymentMethod: method,
     bookingType,
+    monthlyPrice: monthlyPrice ?? (bookingType === 'حجز شهري' ? total + discount : null),
     customNightlyPrice: rate,
     discountAmount: discount,
     discountReason: discount > 0 ? 'خصم تجريبي للبيانات الوهمية' : ''

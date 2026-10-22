@@ -7,19 +7,27 @@ const path = require('path');
 const fs = require('fs');
 function toDataUrl(file) {
   try {
-    const buf = fs.readFileSync(path.join(__dirname, '../assets', file));
-    return 'data:image/svg+xml;base64,' + buf.toString('base64');
+    const rel = file.startsWith('assets') ? file : path.join('assets', file);
+    const fullPath = path.isAbsolute(file) ? file : path.join(__dirname, '..', rel);
+    if (fs.existsSync(fullPath)) {
+      const buf = fs.readFileSync(fullPath);
+      const ext = path.extname(fullPath).toLowerCase();
+      const mime = ext === '.svg' ? 'image/svg+xml' : (ext === '.png' ? 'image/png' : 'image/jpeg');
+      return `data:${mime};base64,` + buf.toString('base64');
+    }
   } catch (err) {
     console.error('Failed to load asset:', file, err.message);
-    return '';
   }
+  return '';
 }
-const sealUrl = toDataUrl('seal.svg');
-const signatureUrl = toDataUrl('signature.svg');
 function embedAssets(html) {
-  return html
-    .replace(/assets\/seal\.svg/g, sealUrl)
-    .replace(/assets\/signature\.svg/g, signatureUrl);
+  if (!html) return '';
+  return html.replace(/src=["'](assets\/[^"']+)["']/g, (match, assetPath) => {
+    const dataUrl = toDataUrl(assetPath);
+    return dataUrl ? `src="${dataUrl}"` : match;
+  })
+  .replace(/assets\/seal\.svg/g, () => toDataUrl('seal.svg'))
+  .replace(/assets\/signature\.svg/g, () => toDataUrl('signature.svg'));
 }
 module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialog, shell, db, backupScheduler, session, helpers }) {
   // 8. System Info & Database Path
@@ -28,7 +36,8 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
       dbPath: session.dbPath,
       user: session.currentUser,
       logId: session.currentLogId,
-      version: app.getVersion()
+      version: (app && typeof app.getVersion === 'function') ? app.getVersion() : '2.0.0',
+      isPackaged: Boolean(app && app.isPackaged)
     };
   });
 
@@ -101,7 +110,7 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
     try {
       const defaultName = `rayhana_backup_${helpers.getLocalDateString()}.sqlite`;
       const { canceled, filePath } = await dialog.showSaveDialog(session.mainWindow, {
-        title: 'حفظ نسخة احتياطية من قاعدة بيانات ريحانة للوحدات السكنية',
+        title: 'حفظ نسخة احتياطية من قاعدة بيانات النظام الفندقي',
         defaultPath: defaultName,
         filters: [{ name: 'SQLite Database (*.sqlite)', extensions: ['sqlite', 'db'] }]
       });
@@ -145,7 +154,20 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
       }
 
       await db.restoreDatabaseFile(filePaths[0]);
-      return { success: true, restoredPath: filePaths[0] };
+      const restoredDate = db.getCurrentBusinessDate();
+      const todayDate = db.getHotelBusinessDate();
+      const settings = db.getBusinessDaySettings();
+      let autoRolloverDisabled = false;
+      if (restoredDate < todayDate && settings.auto_rollover_enabled) {
+        db.updateBusinessDaySettings({ auto_rollover_enabled: false });
+        autoRolloverDisabled = true;
+      }
+      return {
+        success: true,
+        restoredPath: filePaths[0],
+        restoredBusinessDate: restoredDate,
+        autoRolloverDisabled
+      };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -193,13 +215,29 @@ module.exports = function registerSystemIpc(ipcMain, { app, BrowserWindow, dialo
     }
     try {
       await db.restoreDatabaseFile(targetFilePath);
-      return { success: true, restoredPath: targetFilePath };
+      const restoredDate = db.getCurrentBusinessDate();
+      const todayDate = db.getHotelBusinessDate();
+      const settings = db.getBusinessDaySettings();
+      let autoRolloverDisabled = false;
+      if (restoredDate < todayDate && settings.auto_rollover_enabled) {
+        db.updateBusinessDaySettings({ auto_rollover_enabled: false });
+        autoRolloverDisabled = true;
+      }
+      return {
+        success: true,
+        restoredPath: targetFilePath,
+        restoredBusinessDate: restoredDate,
+        autoRolloverDisabled
+      };
     } catch (err) {
       return { success: false, error: err.message };
     }
   });
 
   ipcMain.handle('backups:run-onedrive-backup', async () => {
+    if (!session.currentUser || session.currentUser.role !== 'Admin') {
+      return { success: false, error: 'غير مصرح: النسخ الاحتياطي يتطلب صلاحيات مدير النظام (Admin).' };
+    }
     return helpers.backupDatabase();
   });
 
@@ -345,8 +383,7 @@ await pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(embedAss
         backgroundColor: '#f8fafc',
         webPreferences: {
           nodeIntegration: false,
-          contextIsolation: true,
-              webSecurity: false // <-- هذا السطر يسمح لنافذة المعاينة بقراءة صور assets فوراً!
+          contextIsolation: true
         }
       });
 
@@ -464,11 +501,9 @@ await pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(embedAss
         </html>
       `;
 
-const finalHtml = fullHtml
-  .replace(/assets\/seal\.svg/g, sealUrl)
-  .replace(/assets\/signature\.svg/g, signatureUrl);
+const finalHtml = embedAssets(fullHtml);
 
-previewWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(embedAssets(finalHtml))}`);
+previewWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(finalHtml)}`);
       return { success: true };
     } catch (err) {
       console.error('[Preview Window Error]:', err);

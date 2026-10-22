@@ -29,6 +29,7 @@ function createEarlyMonthly(appDb, { paid = 0, roomPrice = 200, rate = 150, disc
     guestIdNumber: '1000000401',
     roomId: room.id,
     checkInDate: addDays(today, -10),
+    checkOutDate: addDays(today, 20),
     bookingType: 'حجز شهري',
     monthlyPrice: rate * 30,
     paidAmount: paid,

@@ -1,7 +1,7 @@
 {
   "name": "rayhana-suites",
   "version": "2.0.0",
-  "description": "ريحانة للوحدات السكنية - Rayhana Residential Units ERP",
+  "description": "ريحانة للوحدات السكنية - Rayhana Suites ERP",
   "main": "main.js",
   "author": "Rayhana Management",
   "license": "MIT",
@@ -15,10 +15,15 @@
     "test:unit": "node --test",
     "test:quick": "npm run lint && npm run baseline:check && npm run guard && npm run test:unit",
     "reset-db": "node reset-db.js",
+    "seed:test-data": "node scripts/seed-scratch.js --include-future-cases",
     "import-guests": "node import-guests.js",
+    "brand": "node scripts/apply-brand.js",
     "build": "electron-builder --win",
     "builder": "electron-builder --win",
-    "dist": "electron-builder --win",
+    "dist": "node scripts/build-dist.js",
+    "dist:all": "node scripts/build-dist.js --all",
+    "dist:single": "node scripts/build-dist.js --single",
+    "dist:builder": "electron-builder --win",
     "pack": "electron-builder --dir"
   },
   "dependencies": {
@@ -34,15 +39,15 @@
     "madge": "^8.0.0"
   },
   "build": {
-    "appId": "com.rayhana.suites",
+    "appId": "com.hotel.hotel_1",
     "productName": "Rayhana Suites",
-    "copyright": "Copyright © 2026 Rayhana Management. All rights reserved.",
+    "copyright": "Copyright © 2026 مؤسسة مكتب شمس المنازل للخدمات العقارية. All rights reserved.",
     "directories": {
       "output": "dist"
     },
     "win": {
       "icon": "icon.ico",
-      "legalTrademarks": "Rayhana™",
+      "legalTrademarks": "Rayhana Suites™",
       "target": [
         {
           "target": "nsis",
@@ -65,7 +70,7 @@
       "installerHeaderIcon": "icon.ico",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
-      "artifactName": "Rayhana-Suites-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "files": [
       "main.js",
@@ -96,6 +101,7 @@
       "styles.css",
       "css/**/*",
       "assets/**/*",
+      "config/**/*",
       "node_modules/**/*"
     ]
   }

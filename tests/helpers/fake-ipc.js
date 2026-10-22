@@ -48,7 +48,11 @@ function createFakeDeps() {
   };
 
   return {
-    app: { getPath: () => require('path').dirname(db.getDatabaseFilePath()) },
+    app: {
+      getPath: () => require('path').dirname(db.getDatabaseFilePath()),
+      getVersion: () => '2.0.0',
+      isPackaged: false
+    },
     BrowserWindow: fakeBrowserWindow,
     dialog: { showOpenDialog: async () => ({ canceled: true }), showSaveDialog: async () => ({ canceled: true }), showMessageBox: async () => ({ response: 0 }) },
     shell: { showItemInFolder: () => {}, openExternal: async () => {} },

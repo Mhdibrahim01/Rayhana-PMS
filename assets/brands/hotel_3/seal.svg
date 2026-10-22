@@ -1,0 +1,23 @@
+<svg viewBox="0 0 400 250" width="400" height="250" xmlns="http://www.w3.org/2000/svg">
+  <title>ختم شركة دار الضيافة للإيواء السياحي</title>
+  <defs>
+    <style>
+      .seal-text { font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif; font-weight: 700; font-size: 19px; fill: #7b1842; }
+      .seal-number { font-family: Arial, Helvetica, sans-serif; font-weight: bold; font-size: 30px; fill: #7b1842; }
+      .seal-star { font-family: Arial, 'DejaVu Sans', sans-serif; font-size: 22px; fill: #7b1842; }
+    </style>
+    <path id="topCurve" d="M 50,125 A 150,73 0 0,1 350,125"/>
+    <path id="bottomCurve" d="M 50,125 A 150,73 0 0,0 350,125"/>
+  </defs>
+
+  <ellipse cx="200" cy="125" rx="180" ry="100" fill="none" stroke="#7b1842" stroke-width="3.5"/>
+  <ellipse cx="200" cy="125" rx="173" ry="93" fill="none" stroke="#7b1842" stroke-width="1.5"/>
+  <ellipse cx="200" cy="125" rx="110" ry="40" fill="none" stroke="#7b1842" stroke-width="2.5"/>
+
+  <text x="200" y="136" text-anchor="middle" class="seal-number">7045981240</text>
+  <text x="35" y="133" text-anchor="middle" class="seal-star">★</text>
+  <text x="365" y="133" text-anchor="middle" class="seal-star">★</text>
+
+  <text class="seal-text"><textPath href="#topCurve" startOffset="50%" text-anchor="middle">شركة دار الضيافة للإيواء السياحي</textPath></text>
+  <text class="seal-text"><textPath href="#bottomCurve" startOffset="50%" text-anchor="middle">المملكة العربية السعودية</textPath></text>
+</svg>

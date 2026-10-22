@@ -113,6 +113,7 @@ function getDashboardStats() {
   const totalReservations = queryOne("SELECT COUNT(*) AS c FROM reservations")?.c || 0;
   const activeReservations = queryOne("SELECT COUNT(*) AS c FROM reservations WHERE status = 'مؤكد'")?.c || 0;
   const totalRevenue = roundMoney(queryOne("SELECT SUM(total_price) AS sum FROM reservations WHERE status != 'ملغي'")?.sum || 0);
+  const collectedRevenue = roundMoney(queryOne("SELECT SUM(amount) AS sum FROM payments WHERE payment_method != 'من التأمين'")?.sum || 0);
   const totalGuests = queryOne("SELECT COUNT(*) AS c FROM guests")?.c || 0;
 
   return {
@@ -124,6 +125,7 @@ function getDashboardStats() {
     totalReservations,
     activeReservations,
     totalRevenue,
+    collectedRevenue,
     totalGuests
   };
 }
@@ -205,21 +207,23 @@ function getShiftAuditReport(startDate, endDate) {
   let lateCheckoutFeesCollected = 0;
   let cardTotal = 0;
   let transferTotal = 0;
+  let otherTotal = 0;
 
   for (const p of paymentsInRange) {
     const amt = roundMoney(p.amount || 0);
     totalRevenue += amt;
 
-    if (p.payment_method === 'نقداً') {
+    const method = String(p.payment_method || '').trim();
+    if (method === 'نقداً' || /نقد/i.test(method)) {
       cashTotal += amt;
       if (amt > 0) cashCollected += amt;
       else if (amt < 0) cashRefunded += Math.abs(amt);
-    } else if (p.payment_method === 'بطاقة / مدى' || p.payment_method === 'شبكة / مدى' || p.payment_method === 'شبكة') {
+    } else if (method === 'بطاقة / مدى' || method === 'شبكة / مدى' || method === 'شبكة' || /مدى|بطاق|شبك|card|visa|master/i.test(method)) {
       cardTotal += amt;
-    } else if (p.payment_method === 'تحويل بنكي') {
+    } else if (method === 'تحويل بنكي' || /تحويل|بنك|transfer/i.test(method)) {
       transferTotal += amt;
     } else {
-      cashTotal += amt;
+      otherTotal += amt;
     }
   }
 
@@ -232,6 +236,7 @@ function getShiftAuditReport(startDate, endDate) {
     .reduce((total, p) => total + Number(p.amount || 0), 0));
   cardTotal = roundMoney(cardTotal);
   transferTotal = roundMoney(transferTotal);
+  otherTotal = roundMoney(otherTotal);
 
   // 2. Reservations active, created, checked-in, or checked-out in date range
   // Operational movements in range: Created, Check-in, Check-out, Payment transaction, or Deposit movement.
@@ -435,6 +440,7 @@ function getShiftAuditReport(startDate, endDate) {
       lateCheckoutFeesCollected,
       cardTotal,
       transferTotal,
+      otherTotal,
       depositTotal: roundMoney(depositActivity.collected - depositActivity.refunded),
       depositActivity,
       depositCashCollected,

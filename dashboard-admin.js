@@ -20,6 +20,7 @@
       console.error('Load users error:', err);
     }
     await loadBusinessDayAdminSettings();
+    await loadBrandAdminSettings();
   }
 
   async function loadBusinessDayAdminSettings() {
@@ -80,6 +81,104 @@
       }
     } catch (error) {
       console.warn('تعذر تحميل إعدادات اليوم الفندقي:', error);
+    }
+  }
+
+  function updateBrandPreviewAndInputs(brand) {
+    if (!brand) return;
+    const logoEl = document.getElementById('brand-preview-logo');
+    const nameEl = document.getElementById('brand-preview-name');
+    const compEl = document.getElementById('brand-preview-company');
+    const sealEl = document.getElementById('brand-preview-seal');
+    const sigEl = document.getElementById('brand-preview-signature');
+
+    if (logoEl && brand.logo) logoEl.src = brand.logo;
+    if (nameEl && brand.nameAr) nameEl.textContent = brand.nameAr;
+    if (compEl && brand.companyAr) compEl.textContent = brand.companyAr;
+    if (sealEl && brand.seal) sealEl.src = brand.seal;
+    if (sigEl && brand.signature) sigEl.src = brand.signature;
+
+    const inNameAr = document.getElementById('brand-edit-name-ar');
+    const inNameEn = document.getElementById('brand-edit-name-en');
+    const inComp = document.getElementById('brand-edit-company-ar');
+    const inCr = document.getElementById('brand-edit-cr');
+    const inVat = document.getElementById('brand-edit-vat');
+    const inPhone = document.getElementById('brand-edit-phone');
+    const inAddr = document.getElementById('brand-edit-address');
+    const inPost = document.getElementById('brand-edit-postal');
+
+    if (inNameAr) inNameAr.value = brand.nameAr || '';
+    if (inNameEn) inNameEn.value = brand.nameEn || '';
+    if (inComp) inComp.value = brand.companyAr || '';
+    if (inCr) inCr.value = brand.crNumber || '';
+    if (inVat) inVat.value = brand.vatNumber || '';
+    if (inPhone) inPhone.value = brand.phone || '';
+    if (inAddr) inAddr.value = brand.address || '';
+    if (inPost) inPost.value = brand.postalCode || '';
+  }
+
+  async function loadBrandAdminSettings() {
+    try {
+      const brandCard = document.querySelector('.brand-management-card');
+      if (!window.api || typeof window.api.getBrandingConfig !== 'function') {
+        if (brandCard) brandCard.style.display = 'none';
+        return;
+      }
+
+      let isPackaged = Boolean(App.State.isPackaged);
+      try {
+        if (typeof window.api.getAppInfo === 'function') {
+          const info = await window.api.getAppInfo();
+          if (info && typeof info.isPackaged === 'boolean') {
+            isPackaged = info.isPackaged;
+          }
+        }
+      } catch (_) {}
+
+      const res = await window.api.getBrandingConfig();
+      if (res && res.success) {
+        if (brandCard) {
+          brandCard.style.display = '';
+          brandCard.removeAttribute('hidden');
+        }
+
+        const effectiveIsPackaged = Boolean(isPackaged || res.isPackaged);
+        App.State.isPackaged = effectiveIsPackaged;
+        App.State.brands = res.brands || {};
+        App.State.activeBrandId = res.activeBrandId || 'hotel_1';
+        App.State.branding = res.current;
+
+        const switcherControls = document.getElementById('brand-switcher-controls');
+        const titleEl = document.getElementById('brand-management-title');
+        const subtitleEl = document.getElementById('brand-management-subtitle');
+        const btnSave = document.getElementById('btn-save-brand-profile');
+
+        if (effectiveIsPackaged) {
+          // Client mode (Packaged EXE): Only show their hotel data, hide brand switcher
+          if (switcherControls) switcherControls.style.display = 'none';
+          if (titleEl) titleEl.innerHTML = '<span>🏨</span> بيانات المنشأة والفندق (Hotel Profile)';
+          if (subtitleEl) subtitleEl.textContent = 'بيانات المنشأة المعتمدة في الفواتير الرسمية والتقارير والسندات.';
+          if (btnSave) btnSave.innerHTML = '💾 حفظ بيانات المنشأة';
+        } else {
+          // Developer mode (Local/Dev): Show all brands and switcher controls
+          if (switcherControls) switcherControls.style.display = 'flex';
+          if (titleEl) titleEl.innerHTML = '<span>🏷️</span> إدارة الهوية والعلامة التجارية (Multi-Brand / White-Label)';
+          if (subtitleEl) subtitleEl.textContent = 'التبديل بين هويات الفنادق وتحديث بيانات الفاتورة والأختام والتواقيع المعتمدة.';
+          if (btnSave) btnSave.innerHTML = '💾 حفظ تعديلات الهوية';
+
+          const selector = document.getElementById('brand-selector');
+          if (selector && res.brands) {
+            selector.innerHTML = Object.entries(res.brands).map(([id, b]) => {
+              return `<option value="${id}">${App.Helpers.escapeHtml(b.nameAr)} (${App.Helpers.escapeHtml(b.nameEn || id)})</option>`;
+            }).join('');
+            selector.value = App.State.activeBrandId;
+          }
+        }
+
+        updateBrandPreviewAndInputs(res.current);
+      }
+    } catch (error) {
+      console.warn('تعذر تحميل إعدادات الهوية والعلامة التجارية:', error);
     }
   }
 
@@ -407,9 +506,93 @@
     });
   }
 
+  const brandSelector = document.getElementById('brand-selector');
+  if (brandSelector) {
+    brandSelector.addEventListener('change', () => {
+      const selectedId = brandSelector.value;
+      const brand = (App.State.brands && App.State.brands[selectedId]) || null;
+      if (brand) {
+        updateBrandPreviewAndInputs(brand);
+      }
+    });
+  }
+
+  const btnActivateBrand = document.getElementById('btn-activate-brand');
+  if (btnActivateBrand) {
+    btnActivateBrand.addEventListener('click', async () => {
+      const selector = document.getElementById('brand-selector');
+      const selectedId = selector ? selector.value : null;
+      if (!selectedId) return;
+
+      btnActivateBrand.disabled = true;
+      try {
+        const res = await window.api.setActiveBrand(selectedId);
+        if (res && res.success) {
+          App.State.activeBrandId = res.activeBrandId;
+          App.State.branding = res.current;
+          App.Helpers.applyBranding(res.current);
+          updateBrandPreviewAndInputs(res.current);
+          App.Helpers.showToast(`تم تفعيل هوية "${res.current.nameAr}" بنجاح!`, 'success');
+        } else {
+          App.Helpers.showToast(res?.error || 'فشل تفعيل الهوية.', 'error');
+        }
+      } catch (err) {
+        App.Helpers.showToast(`خطأ أثناء تفعيل الهوية: ${err.message}`, 'error');
+      } finally {
+        btnActivateBrand.disabled = false;
+      }
+    });
+  }
+
+  const brandProfileForm = document.getElementById('brand-profile-edit-form');
+  if (brandProfileForm) {
+    brandProfileForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const isPackaged = Boolean(App.State.isPackaged);
+      const selector = document.getElementById('brand-selector');
+      const selectedId = (!isPackaged && selector && selector.value) ? selector.value : App.State.activeBrandId;
+      if (!selectedId) return;
+
+      const profile = {
+        nameAr: document.getElementById('brand-edit-name-ar')?.value?.trim(),
+        nameEn: document.getElementById('brand-edit-name-en')?.value?.trim(),
+        companyAr: document.getElementById('brand-edit-company-ar')?.value?.trim(),
+        crNumber: document.getElementById('brand-edit-cr')?.value?.trim(),
+        vatNumber: document.getElementById('brand-edit-vat')?.value?.trim(),
+        phone: document.getElementById('brand-edit-phone')?.value?.trim(),
+        address: document.getElementById('brand-edit-address')?.value?.trim(),
+        postalCode: document.getElementById('brand-edit-postal')?.value?.trim()
+      };
+
+      const btnSave = document.getElementById('btn-save-brand-profile');
+      if (btnSave) btnSave.disabled = true;
+
+      try {
+        const res = await window.api.updateBrandProfile({ brandId: selectedId, profile });
+        if (res && res.success) {
+          App.State.brands = res.brands;
+          if (res.activeBrandId === selectedId) {
+            App.State.branding = res.current;
+            App.Helpers.applyBranding(res.current);
+          }
+          const updatedBrand = (res.brands && res.brands[selectedId]) || res.current;
+          updateBrandPreviewAndInputs(updatedBrand);
+          App.Helpers.showToast('تم حفظ بيانات المنشأة بنجاح!', 'success');
+        } else {
+          App.Helpers.showToast(res?.error || 'فشل حفظ بيانات المنشأة.', 'error');
+        }
+      } catch (err) {
+        App.Helpers.showToast(`خطأ في حفظ البيانات: ${err.message}`, 'error');
+      } finally {
+        if (btnSave) btnSave.disabled = false;
+      }
+    });
+  }
+
   };
 
   App.Helpers.loadAdminData = loadAdminData;
   App.Helpers.loadBusinessDayAdminSettings = loadBusinessDayAdminSettings;
+  App.Helpers.loadBrandAdminSettings = loadBrandAdminSettings;
 
 })(window.DashboardApp);

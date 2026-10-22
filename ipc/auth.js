@@ -24,8 +24,8 @@ module.exports = function registerAuthIpc(ipcMain, { db, session }) {
     }
   });
 
-  ipcMain.handle('auth:logout', async (event, logId) => {
-    const targetLogId = logId || session.currentLogId;
+  ipcMain.handle('auth:logout', async () => {
+    const targetLogId = session.currentLogId;
     if (targetLogId) {
       db.logEmployeeLogout(targetLogId);
       session.currentLogId = null;

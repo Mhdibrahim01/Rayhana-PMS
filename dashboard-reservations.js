@@ -1144,6 +1144,13 @@
       return;
     }
 
+    const submitBtn = reservationForm.querySelector('button[type="submit"]');
+    const originalSubmitHtml = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>جارٍ تأكيد الحجز...</span>';
+    }
+
     try {
       let res = await window.api.createReservation({
         guestName,
@@ -1258,6 +1265,11 @@
       }
     } catch (err) {
       showToast(`خطأ: ${err.message}`, 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalSubmitHtml;
+      }
     }
   });
 
@@ -3150,6 +3162,10 @@
       });
       if (!confirmed) return;
 
+      const originalText = btnCheckoutWithoutSettle.innerHTML;
+      btnCheckoutWithoutSettle.disabled = true;
+      btnCheckoutWithoutSettle.innerHTML = '<span>جارٍ المغادرة...</span>';
+
       try {
         const payload = isContract
           ? { finalTotalPrice: finalTotal, settleAmount: 0, discountAmount: discAmount, discountReason: discReason, notes: 'تسجيل مغادرة بدون تحصيل (آجل)' }
@@ -3174,6 +3190,9 @@
         }
       } catch (err) {
         showToast(`خطأ: ${err.message}`, 'error');
+      } finally {
+        btnCheckoutWithoutSettle.disabled = false;
+        btnCheckoutWithoutSettle.innerHTML = originalText;
       }
     });
   }
@@ -3355,15 +3374,27 @@
     const dOld = new Date(oldDateStr + 'T00:00:00');
     const dNew = new Date(newDateStr + 'T00:00:00');
     const diffTime = dNew.getTime() - dOld.getTime();
-    currentCalcExtraNights = Math.round(diffTime / (1000 * 60 * 60 * 24));
-    
-    const baseCost = roundMoney(currentCalcExtraNights * nightlyRate);
+    currentCalcExtraNights = Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+    const monthlyRate = Number(currentExtendingReservation.monthly_rate_snapshot) > 0
+      ? Number(currentExtendingReservation.monthly_rate_snapshot)
+      : (Number(currentExtendingReservation.monthly_price) > 0
+        ? Number(currentExtendingReservation.monthly_price)
+        : roundMoney((currentExtendingReservation.price_per_night || 0) * 30));
+
+    let baseCost;
+    if (isMonthlyReservation && monthlyRate > 0 && typeof getCalendarMonthCheckOut === 'function' && newDateStr === getCalendarMonthCheckOut(oldDateStr)) {
+      baseCost = monthlyRate;
+      if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${monthlyRate.toLocaleString()} ر.س (شهر تقويمي)`;
+    } else {
+      baseCost = roundMoney(currentCalcExtraNights * nightlyRate);
+      if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${nightlyRate.toLocaleString()} ر.س`;
+    }
+
     currentCalcAdditionalCost = Math.max(0, roundMoney(baseCost - discountAmount));
     currentCalcNewTotal = roundMoney(currentTotal + currentCalcAdditionalCost);
 
     const nightsLabel = currentCalcExtraNights === 1 ? 'ليلة واحدة' : (currentCalcExtraNights === 2 ? 'ليلتين' : `${currentCalcExtraNights} ليالٍ`);
     if (extendExtraNightsPreview) extendExtraNightsPreview.textContent = nightsLabel;
-    if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${nightlyRate.toLocaleString()} ر.س`;
     if (extendAdditionalCostPreview) extendAdditionalCostPreview.textContent = `+${currentCalcAdditionalCost.toLocaleString()} ر.س`;
     
     if (extendDiscountBadge) {
@@ -3521,9 +3552,15 @@
         halfDayPresetActive = false;
       }
 
-      const d = new Date(currentExtendingReservation.check_out_date + 'T00:00:00');
-      d.setDate(d.getDate() + days);
-      const newDateStr = (typeof getLocalDateString === 'function') ? getLocalDateString(d) : d.toISOString().split('T')[0];
+      let newDateStr;
+      if (days === 30 && currentExtendingReservation.booking_type === 'حجز شهري' && typeof getCalendarMonthCheckOut === 'function') {
+        newDateStr = getCalendarMonthCheckOut(currentExtendingReservation.check_out_date);
+      }
+      if (!newDateStr) {
+        const d = new Date(currentExtendingReservation.check_out_date + 'T00:00:00');
+        d.setDate(d.getDate() + days);
+        newDateStr = (typeof getLocalDateString === 'function') ? getLocalDateString(d) : d.toISOString().split('T')[0];
+      }
 
       if (extendNewCheckoutDate) {
         extendNewCheckoutDate.value = newDateStr;

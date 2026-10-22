@@ -121,15 +121,15 @@ function saveConfig() {
 }
 
 /**
- * تنظيف وتدوير النسخ القديمة لحفظ مساحة القرص (الاحتفاظ بآخر 60 نسخة يومية)
+ * تدوير وحذف النسخ القديمة في مجلد محدد للاحتفاظ بآخر maxRetain نسخة
  */
-function cleanOldBackups(maxRetain = 60) {
+function rotateDirectoryBackups(targetDirectory, maxRetain = 60) {
+  if (!targetDirectory || !fs.existsSync(targetDirectory)) return;
   try {
-    if (!fs.existsSync(backupDir)) return;
-    const files = fs.readdirSync(backupDir)
-      .filter(f => (f.startsWith('rayhana_daily_backup_') || f.startsWith('ahmed_hotel_daily_backup_')) && f.endsWith('.sqlite') && !f.includes('latest'))
+    const files = fs.readdirSync(targetDirectory)
+      .filter(f => (f.startsWith('rayhana_daily_backup_') || f.startsWith('ahmed_hotel_daily_backup_') || f.startsWith('backup_')) && f.endsWith('.sqlite') && !f.includes('latest'))
       .map(f => {
-        const fullPath = path.join(backupDir, f);
+        const fullPath = path.join(targetDirectory, f);
         return { name: f, path: fullPath, time: fs.statSync(fullPath).mtimeMs };
       })
       .sort((a, b) => b.time - a.time);
@@ -139,14 +139,29 @@ function cleanOldBackups(maxRetain = 60) {
       for (const item of toDelete) {
         try {
           fs.unlinkSync(item.path);
-          console.log('[BackupScheduler Rotation] تم حذف نسخة قديمة لتوفير المساحة:', item.name);
+          console.log(`[BackupScheduler Rotation] تم حذف نسخة قديمة لتوفير المساحة من (${path.basename(targetDirectory)}):`, item.name);
         } catch (e) {
           console.warn('[BackupScheduler Rotation] خطأ في حذف النسخة القديمة:', e.message);
         }
       }
     }
   } catch (err) {
-    console.warn('[BackupScheduler Rotation Error]:', err.message);
+    console.warn(`[BackupScheduler Rotation Error in ${targetDirectory}]:`, err.message);
+  }
+}
+
+/**
+ * تنظيف وتدوير النسخ القديمة لحفظ مساحة القرص والسحابة (الاحتفاظ بآخر 60 نسخة يومية)
+ */
+function cleanOldBackups(maxRetain = 60) {
+  rotateDirectoryBackups(backupDir, maxRetain);
+  if (mirrorDir && mirrorDir !== backupDir) {
+    rotateDirectoryBackups(mirrorDir, maxRetain);
+  }
+  const oneDriveDir = process.env.OneDrive || process.env.OneDriveConsumer;
+  if (oneDriveDir) {
+    rotateDirectoryBackups(path.join(oneDriveDir, 'Rayhana_Backups'), maxRetain);
+    rotateDirectoryBackups(path.join(oneDriveDir, 'AhmedERP_Backups'), maxRetain);
   }
 }
 
@@ -162,10 +177,11 @@ async function performDailyBackup(reason = 'scheduled_midnight') {
 
   isBackupRunning = true;
   const today = getLocalDateString();
+  const openBusinessDate = dbModule && typeof dbModule.getCurrentBusinessDate === 'function' ? dbModule.getCurrentBusinessDate() : null;
   const backupFileName = `rayhana_daily_backup_${today}_12-00-AM.sqlite`;
   const targetPath = path.join(backupDir, backupFileName);
 
-  console.log(`[BackupScheduler] بدء النسخ الاحتياطي اليومي (${reason}) لليوم ${today} إلى:`, targetPath);
+  console.log(`[BackupScheduler] بدء النسخ الاحتياطي اليومي (${reason}) لليوم ${today} (تاريخ العمل: ${openBusinessDate || today}) إلى:`, targetPath);
 
   try {
     // 1. التأكد من وجود المجلدات
@@ -205,12 +221,14 @@ async function performDailyBackup(reason = 'scheduled_midnight') {
     const oneDriveDir = process.env.OneDrive || process.env.OneDriveConsumer;
     if (oneDriveDir && fs.existsSync(oneDriveDir)) {
       try {
-        const cloudBackupDir = path.join(oneDriveDir, 'AhmedERP_Backups');
+        const modernCloudDir = path.join(oneDriveDir, 'Rayhana_Backups');
+        const legacyCloudDir = path.join(oneDriveDir, 'AhmedERP_Backups');
+        const cloudBackupDir = fs.existsSync(legacyCloudDir) && !fs.existsSync(modernCloudDir) ? legacyCloudDir : modernCloudDir;
         if (!fs.existsSync(cloudBackupDir)) {
           fs.mkdirSync(cloudBackupDir, { recursive: true });
         }
         fs.copyFileSync(targetPath, path.join(cloudBackupDir, backupFileName));
-        fs.copyFileSync(targetPath, path.join(cloudBackupDir, 'backup_latest.sqlite'));
+        fs.copyFileSync(targetPath, path.join(cloudBackupDir, 'rayhana_daily_backup_latest.sqlite'));
         console.log(`[BackupScheduler] ☁️ تم مزامنة النسخة سحابياً مع Microsoft OneDrive بنجاح: ${cloudBackupDir}`);
       } catch (cloudErr) {
         console.warn('[BackupScheduler] تعذر المزامنة السحابية مع OneDrive:', cloudErr.message);
@@ -220,6 +238,7 @@ async function performDailyBackup(reason = 'scheduled_midnight') {
     // 5. حساب الحجم وتحديث الحالة
     const stats = fs.statSync(targetPath);
     schedulerState.lastDailyBackupDate = today;
+    schedulerState.lastBusinessDate = openBusinessDate;
     schedulerState.lastDailyBackupTimestamp = new Date().toISOString();
     schedulerState.lastDailyBackupFile = backupFileName;
     schedulerState.lastDailyBackupPath = targetPath;
@@ -239,7 +258,7 @@ async function performDailyBackup(reason = 'scheduled_midnight') {
       if (electronNotification && electronNotification.isSupported()) {
         const notif = new electronNotification({
           title: 'ريحانة للوحدات السكنية | نسخة احتياطية يومية 🕛',
-          body: `تم أخذ النسخة الاحتياطية اليومية بنجاح (12:00 AM)\nالملف: ${backupFileName}`,
+          body: `تم أخذ النسخة الاحتياطية اليومية بنجاح (12:00 AM)\nالملف: ${backupFileName}${openBusinessDate ? ` | تاريخ العمل: ${openBusinessDate}` : ''}`,
           silent: false
         });
         notif.show();
@@ -259,6 +278,7 @@ async function performDailyBackup(reason = 'scheduled_midnight') {
           path: targetPath,
           sizeFormatted: formatBytes(stats.size),
           date: today,
+          businessDate: openBusinessDate,
           timestamp: schedulerState.lastDailyBackupTimestamp,
           success: true
         });

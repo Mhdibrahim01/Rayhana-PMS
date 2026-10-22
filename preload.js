@@ -110,5 +110,15 @@ contextBridge.exposeInMainWorld('api', {
   setupAppLock: (password) => ipcRenderer.invoke('app-lock:setup', password),
   unlockApp: (password) => ipcRenderer.invoke('app-lock:verify', password),
   resetAppLockWithDefault: (data) => ipcRenderer.invoke('app-lock:reset-with-default', data),
-  exitApp: () => ipcRenderer.invoke('app-lock:exit')
+  exitApp: () => ipcRenderer.invoke('app-lock:exit'),
+
+  // Multi-Brand & White-Label Customization
+  getBrandingConfig: () => ipcRenderer.invoke('brand:get-config'),
+  setActiveBrand: (brandId) => ipcRenderer.invoke('brand:set-active', brandId),
+  updateBrandProfile: (data) => ipcRenderer.invoke('brand:update-profile', data),
+  onBrandChanged: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('brand:changed', handler);
+    return () => ipcRenderer.removeListener('brand:changed', handler);
+  }
 });

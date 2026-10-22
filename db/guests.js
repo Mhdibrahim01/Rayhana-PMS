@@ -308,81 +308,90 @@ function bulkImportGuests(guestsList) {
   const insertStmt = db.prepare("INSERT INTO guests (name, phone, id_number) VALUES (?, ?, ?)");
   const updateStmt = db.prepare("UPDATE guests SET name = ?, phone = ?, id_number = ? WHERE id = ?");
 
-  for (const g of guestsList) {
-    // Resolve Name from multiple common Arabic & English column headers
-    let name = String(
-      g.name || g.Name || g.guest_name || g.customer_name ||
-      g['الاسم'] || g['اسم النزيل'] || g['اسم العميل'] || g['الاسم الكامل'] || ''
-    ).trim();
+  db.run("BEGIN TRANSACTION;");
+  try {
+    for (const g of guestsList) {
+      // Resolve Name from multiple common Arabic & English column headers
+      let name = String(
+        g.name || g.Name || g.guest_name || g.customer_name ||
+        g['الاسم'] || g['اسم النزيل'] || g['اسم العميل'] || g['الاسم الكامل'] || ''
+      ).trim();
 
-    // Resolve Phone
-    let rawPhone = String(
-      g.phone || g.Phone || g.mobile || g.Mobile || g.telephone ||
-      g['الجوال'] || g['الهاتف'] || g['رقم الجوال'] || g['رقم الهاتف'] || g['الموبايل'] || ''
-    ).trim();
+      // Resolve Phone
+      let rawPhone = String(
+        g.phone || g.Phone || g.mobile || g.Mobile || g.telephone ||
+        g['الجوال'] || g['الهاتف'] || g['رقم الجوال'] || g['رقم الهاتف'] || g['الموبايل'] || ''
+      ).trim();
 
-    // Resolve ID Number
-    let rawId = String(
-      g.id_number || g.idNumber || g.national_id || g.iqama ||
-      g['الهوية'] || g['رقم الهوية'] || g['الهوية الوطنية'] || g['السجل المدني'] || g['الإقامة'] || g['رقم الإقامة'] || ''
-    ).trim();
+      // Resolve ID Number
+      let rawId = String(
+        g.id_number || g.idNumber || g.national_id || g.iqama ||
+        g['الهوية'] || g['رقم الهوية'] || g['الهوية الوطنية'] || g['السجل المدني'] || g['الإقامة'] || g['رقم الإقامة'] || ''
+      ).trim();
 
-    // Normalize Saudi mobile number (e.g. +9665..., 9665..., 5...)
-    let phone = rawPhone.replace(/\D/g, '');
-    if (phone.startsWith('9665') && phone.length === 12) {
-      phone = '0' + phone.substring(3);
-    } else if (phone.startsWith('009665') && phone.length === 14) {
-      phone = '0' + phone.substring(5);
-    } else if (phone.startsWith('5') && (phone.length === 8 || phone.length === 9)) {
-      phone = '0' + phone;
-    }
+      // Normalize Saudi mobile number (e.g. +9665..., 9665..., 5...)
+      let phone = rawPhone.replace(/\D/g, '');
+      if (phone.startsWith('9665') && phone.length === 12) {
+        phone = '0' + phone.substring(3);
+      } else if (phone.startsWith('009665') && phone.length === 14) {
+        phone = '0' + phone.substring(5);
+      } else if (phone.startsWith('5') && (phone.length === 8 || phone.length === 9)) {
+        phone = '0' + phone;
+      }
 
-    // Normalize ID or Passport number (preserve letters, digits, and hyphens)
-    let id_number = rawId.replace(/[^A-Za-z0-9\-]/g, '').trim();
+      // Normalize ID or Passport number (preserve letters, digits, and hyphens)
+      let id_number = rawId.replace(/[^A-Za-z0-9\-]/g, '').trim();
 
-    if (!name) {
-      skipped++;
-      continue;
-    }
+      if (!name) {
+        skipped++;
+        continue;
+      }
 
-    // Check if customer already exists by ID or Phone
-    let existing = null;
-    let matchReason = '';
-    if (id_number) {
-      existing = queryOne("SELECT id, name, phone, id_number FROM guests WHERE id_number = ?", [id_number]);
-      if (existing) matchReason = `تطابق رقم الهوية (${id_number})`;
-    }
-    if (!existing && phone) {
-      existing = queryOne("SELECT id, name, phone, id_number FROM guests WHERE phone = ?", [phone]);
-      if (existing) matchReason = `تطابق رقم الجوال (${phone})`;
-    }
+      // Check if customer already exists by ID or Phone
+      let existing = null;
+      let matchReason = '';
+      if (id_number) {
+        existing = queryOne("SELECT id, name, phone, id_number FROM guests WHERE id_number = ?", [id_number]);
+        if (existing) matchReason = `تطابق رقم الهوية (${id_number})`;
+      }
+      if (!existing && phone) {
+        existing = queryOne("SELECT id, name, phone, id_number FROM guests WHERE phone = ?", [phone]);
+        if (existing) matchReason = `تطابق رقم الجوال (${phone})`;
+      }
 
-    if (!existing) {
-      insertStmt.run([name, phone, id_number]);
-      inserted++;
-    } else {
-      // Merge/update missing fields if existing record had incomplete data
-      const mergedName = name || existing.name;
-      const mergedPhone = phone || existing.phone;
-      const mergedId = id_number || existing.id_number;
-      updateStmt.run([mergedName, mergedPhone, mergedId, existing.id]);
-      updated++;
-      if (updatedGuests.length < 100) {
-        updatedGuests.push({
-          id: existing.id,
-          name: mergedName,
-          phone: mergedPhone,
-          id_number: mergedId,
-          matchReason: matchReason || 'تطابق في البيانات السابقة'
-        });
+      if (!existing) {
+        insertStmt.run([name, phone, id_number]);
+        inserted++;
+      } else {
+        // Merge/update missing fields if existing record had incomplete data
+        const mergedName = name || existing.name;
+        const mergedPhone = phone || existing.phone;
+        const mergedId = id_number || existing.id_number;
+        updateStmt.run([mergedName, mergedPhone, mergedId, existing.id]);
+        updated++;
+        if (updatedGuests.length < 100) {
+          updatedGuests.push({
+            id: existing.id,
+            name: mergedName,
+            phone: mergedPhone,
+            id_number: mergedId,
+            matchReason: matchReason || 'تطابق في البيانات السابقة'
+          });
+        }
       }
     }
-  }
 
-  insertStmt.free();
-  updateStmt.free();
-  saveToFile();
-  return { inserted, updated, skipped, total: guestsList.length, updatedGuests };
+    insertStmt.free();
+    updateStmt.free();
+    db.run("COMMIT;");
+    saveToFile();
+    return { inserted, updated, skipped, total: guestsList.length, updatedGuests };
+  } catch (err) {
+    try { insertStmt.free(); } catch (_) {}
+    try { updateStmt.free(); } catch (_) {}
+    try { db.run("ROLLBACK;"); } catch (_) {}
+    throw err;
+  }
 }
 
 module.exports = {

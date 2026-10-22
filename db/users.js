@@ -115,6 +115,10 @@ function deleteUser(userId) {
   if (hasPayments) {
     throw new Error('لا يمكن حذف هذا المستخدم لوجود سندات مالية ومقبوضات مسجلة باسمه في النظام.');
   }
+  const hasLogs = queryOne("SELECT id FROM EmployeeLogs WHERE user_id = ? LIMIT 1", [targetId]);
+  if (hasLogs) {
+    throw new Error('لا يمكن حذف هذا المستخدم لوجود سجلات دخول ونشاط مرتبطة به في النظام.');
+  }
   const stmt = db.prepare("DELETE FROM users WHERE id = ?");
   stmt.run([targetId]);
   stmt.free();

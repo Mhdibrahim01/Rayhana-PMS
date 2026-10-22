@@ -12,7 +12,10 @@ window.DashboardApp = {
     roomStatusChart: null,
     reservationsCache: [],
     todayCheckoutsRows: [],
-    todayCheckoutsActiveFilter: "all"
+    todayCheckoutsActiveFilter: "all",
+    branding: null,
+    brands: {},
+    activeBrandId: 'hotel_1'
   },
   DOM: {},
   Helpers: {}
@@ -415,7 +418,44 @@ window.DashboardApp = {
   App.Helpers.formatArabicDateTime = formatArabicDateTime;
   App.Helpers.parseStoredTimestamp = parseStoredTimestamp;
   App.Helpers.getReservationFinancials = getReservationFinancials;
-  window.getReservationFinancials = getReservationFinancials;
+  function getActiveBrand() {
+    return App.State.branding || {
+      id: 'hotel_1',
+      nameAr: 'ريحانة للوحدات السكنية',
+      nameEn: 'Rayhana Suites',
+      companyAr: 'مؤسسة مكتب شمس المنازل للخدمات العقارية',
+      subtitle: 'ريحانة للوحدات السكنية المفروشة',
+      crNumber: '7038955915',
+      vatNumber: '310123456700003',
+      address: 'الخبر - الثقبة',
+      postalCode: '34625',
+      phone: '0560631783',
+      invoiceHeader: 'فاتورة ضريبية - ريحانة للوحدات السكنية',
+      logo: 'assets/brands/hotel_1/logo.png',
+      seal: 'assets/brands/hotel_1/seal.svg',
+      signature: 'assets/brands/hotel_1/signature.svg'
+    };
+  }
+
+  function applyBranding(brand) {
+    if (!brand) return;
+    App.State.branding = brand;
+    const logoEl = document.getElementById('sidebar-brand-logo');
+    const titleEl = document.getElementById('sidebar-brand-title');
+    const subEl = document.getElementById('sidebar-brand-subtitle');
+    const topHeadingEl = document.getElementById('topbar-heading');
+    const topSubheadingEl = document.getElementById('topbar-subheading');
+
+    if (logoEl && brand.logo) logoEl.src = brand.logo;
+    if (titleEl && brand.nameAr) titleEl.textContent = brand.nameAr;
+    if (subEl && brand.nameEn) subEl.textContent = brand.nameEn;
+    if (topHeadingEl && brand.nameAr) topHeadingEl.textContent = brand.nameAr;
+    if (topSubheadingEl && brand.nameEn) topSubheadingEl.textContent = `${brand.nameEn} • لوحة التحكم وإدارة العمليات`;
+    document.title = `لوحة التحكم | ${brand.nameAr} - ${brand.nameEn || ''}`;
+  }
+
+  App.Helpers.getActiveBrand = getActiveBrand;
+  App.Helpers.applyBranding = applyBranding;
   App.Helpers.escapeHtml = escapeHtml;
 
 })(window.DashboardApp);

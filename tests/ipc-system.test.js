@@ -37,5 +37,11 @@ test('IPC System handlers', async t => {
       const reset = await ipcMain.invoke('app:factory-reset', {}, { password: 'admin' });
       assert.equal(reset.success, true);
     });
+
+    await t.test('app:get-info returns system metadata including isPackaged', async () => {
+      const info = await ipcMain.invoke('app:get-info', {});
+      assert.ok('isPackaged' in info);
+      assert.equal(typeof info.isPackaged, 'boolean');
+    });
   });
 });

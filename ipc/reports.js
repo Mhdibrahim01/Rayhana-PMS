@@ -4,8 +4,17 @@
  */
 
 module.exports = function registerReportsIpc(ipcMain, { db, session, helpers }) {
+  function requireSession() {
+    if (!session.currentUser) {
+      return { success: false, error: 'غير مصرح: يرجى تسجيل الدخول أولاً.' };
+    }
+    return null;
+  }
+
   // 3. Analytics & Statistics
   ipcMain.handle('dashboard:get-stats', async () => {
+    const denied = requireSession();
+    if (denied) return denied;
     try {
       const stats = db.getDashboardStats();
       return { success: true, data: stats };
@@ -17,9 +26,8 @@ module.exports = function registerReportsIpc(ipcMain, { db, session, helpers }) 
   // Logged-in staff can see the current shift totals on the overview. Return only
   // aggregate amounts here; guest and transaction details remain Admin-only.
   ipcMain.handle('reports:get-current-shift-summary', async () => {
-    if (!session.currentUser) {
-      return { success: false, error: 'غير مصرح: يرجى تسجيل الدخول أولاً.' };
-    }
+    const denied = requireSession();
+    if (denied) return denied;
     try {
       return { success: true, data: db.getCurrentShiftRevenueSummary() };
     } catch (err) {
@@ -28,6 +36,8 @@ module.exports = function registerReportsIpc(ipcMain, { db, session, helpers }) 
   });
 
   ipcMain.handle('analytics:get-monthly-revenue', async () => {
+    const denied = requireSession();
+    if (denied) return denied;
     try {
       const monthlyData = db.getMonthlyRevenue();
       return { success: true, data: monthlyData };

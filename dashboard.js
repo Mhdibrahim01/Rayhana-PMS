@@ -537,8 +537,13 @@
     });
 
     // 3. INSTANT: Update topbar text (text swap — negligible cost)
+    const currentBrand = (window.DashboardApp?.Helpers?.getActiveBrand)
+      ? window.DashboardApp.Helpers.getActiveBrand()
+      : { nameAr: 'لوحة التحكم', nameEn: 'Control Panel' };
+    const brandNameAr = currentBrand.nameAr || 'لوحة التحكم';
+    const brandNameEn = currentBrand.nameEn || 'PMS';
     const titleMap = {
-      overview: ['ريحانة للوحدات السكنية', 'Rayhana Suites • لوحة التحكم وإدارة العمليات'],
+      overview: [brandNameAr, `${brandNameEn} • لوحة التحكم وإدارة العمليات`],
       reservations: ['سجل وإدارة الحجوزات', 'عرض وتتبع جميع الحجوزات المؤكدة والمكتملة والملغاة'],
       rooms: ['إدارة الغرف الفندقية', 'متابعة حالات الإشغال والغرف المتاحة ودورة النظافة'],
       guests: ['دليل وسجل النزلاء', 'Guest Directory • بيانات النزلاء وسجل الإقامات السابقة'],
@@ -1014,6 +1019,17 @@
         </style>`;
       const receiptPrintFitScript = `<script>(function(){window.prepareReceiptForPrint=function(){const receipt=document.querySelector('.receipt-document');return receipt?(${fitReceiptToA4Page.toString()})(receipt):null;};window.addEventListener('beforeprint',window.prepareReceiptForPrint);})();</script>`;
 
+      const activeBrand = (window.DashboardApp && window.DashboardApp.Helpers && window.DashboardApp.Helpers.getActiveBrand) ? window.DashboardApp.Helpers.getActiveBrand() : {
+        companyAr: 'مؤسسة مكتب شمس المنازل للخدمات العقارية',
+        nameAr: 'ريحانة للوحدات السكنية',
+        crNumber: '7038955915',
+        address: 'الخبر - الثقبة',
+        postalCode: '34625',
+        phone: '0560631783',
+        seal: 'assets/seal.svg',
+        signature: 'assets/signature.svg'
+      };
+
       invoicePrintableArea.innerHTML = `
         ${receiptDocumentStyles}
         ${receiptPrintFitScript}
@@ -1029,14 +1045,14 @@
           <div class="receipt-header" style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 24px; margin-bottom: 28px;">
             <!-- Company Info (Right) -->
             <div style="display: flex; gap: 16px; align-items: flex-start;">
-             
+              ${activeBrand.logo ? `<img src="${activeBrand.logo}" alt="شعار الفندق" style="width: 52px; height: 52px; border-radius: 8px; object-fit: contain; border: 1px solid #e2e8f0; background: #fff; padding: 2px;">` : ''}
               <div>
-                <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? 'مؤسسة مكتب شمس المنازل للخدمات العقارية' : 'ريحانة للوحدات السكنية'}</h2>
+                <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? (activeBrand.companyAr || 'مؤسسة مكتب شمس المنازل للخدمات العقارية') : (activeBrand.nameAr || 'ريحانة للوحدات السكنية')}</h2>
                 <div style="font-size: 0.85rem; color: #64748b; line-height: 1.6;">
-                  <div>العنوان: الخبر - الثقبة </div>
-                  <div>الرمز البريدي: 34625</div>
-                  <div>هاتف الاستقبال: 0560631783</div>
-                  ${isMonthly ? '<div>الرقم الموحد: 7038955915</div>' : ''}
+                  <div>العنوان: ${escapeHtml(activeBrand.address || 'الخبر - الثقبة')} </div>
+                  <div>الرمز البريدي: ${escapeHtml(activeBrand.postalCode || '34625')}</div>
+                  <div>هاتف الاستقبال: ${escapeHtml(activeBrand.phone || '0560631783')}</div>
+                  ${isMonthly ? (activeBrand.crNumber && activeBrand.crNumber !== '7038955915' ? `<div>الرقم الموحد: ${escapeHtml(activeBrand.crNumber)}</div>` : '<div>الرقم الموحد: 7038955915</div>') : ''}
                 </div>
               </div>
             </div>
@@ -1346,8 +1362,8 @@
           </div>
 
           <div class="receipt-signature-row ${isMonthly ? 'receipt-signature-monthly' : ''}" dir="rtl">
-            ${isMonthly ? `<div class="receipt-signature-cell"><strong>ختم المؤسسة</strong><img class="receipt-seal" src="assets/seal.svg" alt="الختم" onerror="this.style.display='none'"></div>` : ''}
-            <div class="receipt-signature-cell"><strong>توقيع الموظف</strong><div class="receipt-signature-line receipt-staff-signature-line">${isMonthly ? '<img src="assets/signature.svg" alt="التوقيع" onerror="this.style.display=\'none\'">' : ''}</div></div>
+            ${isMonthly ? `<div class="receipt-signature-cell"><strong>ختم المؤسسة</strong><img class="receipt-seal" src="${activeBrand.seal || 'assets/seal.svg'}" alt="الختم" onerror="this.style.display='none'"></div>` : ''}
+            <div class="receipt-signature-cell"><strong>توقيع الموظف</strong><div class="receipt-signature-line receipt-staff-signature-line">${isMonthly ? `<img src="${activeBrand.signature || 'assets/signature.svg'}" alt="التوقيع" onerror="this.style.display='none'">` : ''}</div></div>
             <div class="receipt-signature-cell receipt-receiver-signature"><strong>${isMonthly ? 'توقيع المستأجر' : 'توقيع المستلم'}</strong><div class="receipt-signature-line"></div><small>بتوقيعي أقر بالاطلاع على الشروط أعلاه والموافقة عليها.</small></div>
           </div>
 
@@ -2929,8 +2945,11 @@
       return;
     }
 
+    const activeBrand = (window.DashboardApp && window.DashboardApp.Helpers && window.DashboardApp.Helpers.getActiveBrand) ? window.DashboardApp.Helpers.getActiveBrand() : null;
+    const hotelBrandName = activeBrand?.nameAr || 'الفندق';
+
     const message = `مرحباً ${res.guest_name || 'عزيزنا النزيل'}،
-تم تأكيد حجزك في فندقنا (Ahmed ERP).
+تم تأكيد حجزك في ${hotelBrandName}.
 رقم الغرفة: ${res.room_number || '-'}
 تاريخ الوصول: ${res.check_in_date || '-'}
 تاريخ المغادرة: ${res.check_out_date || '-'}
@@ -3027,6 +3046,47 @@
 
   // --- INITIALIZE APPLICATION ---
   async function init() {
+
+    try {
+      if (window.api && typeof window.api.getBrandingConfig === 'function') {
+        const brandRes = await window.api.getBrandingConfig();
+        if (brandRes && brandRes.success && brandRes.current) {
+          window.DashboardApp.State.branding = brandRes.current;
+          window.DashboardApp.State.brands = brandRes.brands;
+          window.DashboardApp.State.activeBrandId = brandRes.activeBrandId;
+          window.DashboardApp.Helpers.applyBranding(brandRes.current);
+
+          let isPackaged = Boolean(brandRes.isPackaged);
+          try {
+            if (typeof window.api.getAppInfo === 'function') {
+              const info = await window.api.getAppInfo();
+              if (info && typeof info.isPackaged === 'boolean') {
+                isPackaged = info.isPackaged;
+              }
+            }
+          } catch (_) {}
+
+          window.DashboardApp.State.isPackaged = isPackaged;
+
+          if (isPackaged) {
+            const switcher = document.getElementById('brand-switcher-controls');
+            if (switcher) switcher.style.display = 'none';
+          }
+        }
+      }
+      if (window.api && typeof window.api.onBrandChanged === 'function') {
+        window.api.onBrandChanged((brandData) => {
+          if (brandData && brandData.current) {
+            window.DashboardApp.State.branding = brandData.current;
+            window.DashboardApp.State.brands = brandData.brands;
+            window.DashboardApp.State.activeBrandId = brandData.activeBrandId;
+            window.DashboardApp.Helpers.applyBranding(brandData.current);
+          }
+        });
+      }
+    } catch (brandErr) {
+      console.warn('[Branding] Initial load failed:', brandErr);
+    }
 
     // Phase 5 DOM Bindings
     window.DashboardApp.DOM.roomsList = document.getElementById('rooms-list');

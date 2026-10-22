@@ -4187,40 +4187,47 @@
   function executeAttentionAction(item) {
     if (!item) return;
 
-    if (item.action === 'checkout' && item.reservation) {
-      if (App?.Helpers?.openContractSettleModal) {
-        App.Helpers.openContractSettleModal(item.reservation);
-      } else if (App?.Helpers?.openReservationPreview) {
-        App.Helpers.openReservationPreview(item.reservation.id);
-      } else {
-        showMissingHelperToast();
+    try {
+      if (item.action === 'checkout' && item.reservation) {
+        if (App?.Helpers?.openContractSettleModal) {
+          App.Helpers.openContractSettleModal(item.reservation);
+        } else if (App?.Helpers?.openReservationPreview) {
+          App.Helpers.openReservationPreview(item.reservation.id);
+        } else {
+          showMissingHelperToast();
+        }
+      } else if (item.action === 'payment' && item.reservation) {
+        if (window.openAddPaymentModal) {
+          window.openAddPaymentModal(item.reservation.id);
+        } else if (App?.Helpers?.openReservationPreview) {
+          App.Helpers.openReservationPreview(item.reservation.id);
+        } else {
+          showMissingHelperToast();
+        }
+      } else if (item.action === 'extend' && item.reservation) {
+        if (window.openExtendStayModal) {
+          window.openExtendStayModal(item.reservation.id);
+        } else if (App?.Helpers?.openReservationPreview) {
+          App.Helpers.openReservationPreview(item.reservation.id);
+        } else {
+          showMissingHelperToast();
+        }
+      } else if (item.action === 'preview' && item.reservation) {
+        if (App?.Helpers?.openReservationPreview) {
+          App.Helpers.openReservationPreview(item.reservation.id);
+        } else if (window.openInvoiceModal) {
+          window.openInvoiceModal(item.reservation.id);
+        } else {
+          showMissingHelperToast();
+        }
+      } else if (item.action === 'mark-clean' && item.room) {
+        requestRoomCleaningCompletion(item.room);
       }
-    } else if (item.action === 'payment' && item.reservation) {
-      if (window.openAddPaymentModal) {
-        window.openAddPaymentModal(item.reservation.id);
-      } else if (App?.Helpers?.openReservationPreview) {
-        App.Helpers.openReservationPreview(item.reservation.id);
-      } else {
-        showMissingHelperToast();
+    } catch (err) {
+      console.error('[Attention] Action failed:', err);
+      if (App?.Helpers?.showToast) {
+        App.Helpers.showToast('تعذر إكمال الإجراء المطلوب: ' + err.message, 'error');
       }
-    } else if (item.action === 'extend' && item.reservation) {
-      if (window.openExtendStayModal) {
-        window.openExtendStayModal(item.reservation.id);
-      } else if (App?.Helpers?.openReservationPreview) {
-        App.Helpers.openReservationPreview(item.reservation.id);
-      } else {
-        showMissingHelperToast();
-      }
-    } else if (item.action === 'preview' && item.reservation) {
-      if (App?.Helpers?.openReservationPreview) {
-        App.Helpers.openReservationPreview(item.reservation.id);
-      } else if (window.openInvoiceModal) {
-        window.openInvoiceModal(item.reservation.id);
-      } else {
-        showMissingHelperToast();
-      }
-    } else if (item.action === 'mark-clean' && item.room) {
-      requestRoomCleaningCompletion(item.room);
     }
   }
 
