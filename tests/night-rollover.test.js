@@ -193,7 +193,7 @@ test('Night Rollover Feature - Scheduler & Database Execution', async t => {
       db.updateBusinessDaySettings({ auto_rollover_enabled: true });
     });
 
-    await t.test('open employee session marks shift_reconciliation_required', async () => {
+    await t.test('open employee session does not require reconciliation after automatic rollover', async () => {
       // Simulate open receptionist session
       connection.db.run(`
         INSERT INTO EmployeeLogs (user_id, login_time, logout_time)
@@ -211,10 +211,10 @@ test('Night Rollover Feature - Scheduler & Database Execution', async t => {
       assert.equal(result.businessDate, '2026-10-10');
 
       const audit = connection.queryOne('SELECT * FROM night_audits WHERE closed_business_date = ?', ['2026-10-09']);
-      assert.equal(audit.shift_reconciliation_required, 1, 'Open session must flag reconciliation');
+      assert.equal(audit.shift_reconciliation_required, 0, 'Automatic rollover must not require shift reconciliation');
 
       const pending = db.getPendingShiftReconciliationAudits();
-      assert.ok(pending.some(p => p.closed_business_date === '2026-10-09'));
+      assert.ok(!pending.some(p => p.closed_business_date === '2026-10-09'), 'Automatically rolled day must not appear in pending reconciliations');
 
       assertDatabaseIntegrity(connection, 'shift reconciliation flag on rollover');
     });
@@ -314,4 +314,3 @@ test('Night Rollover Feature - IPC Integration', async t => {
     });
   });
 });
-

@@ -3474,14 +3474,14 @@
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px;">
           <!-- Metric 1: Total Price -->
           <div class="card" style="padding: 10px; text-align: center;">
-            <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px;">إجمالي الحجز</div>
+            <div id="payment-modal-total-label" style="font-size: 0.72rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px;">إجمالي الحجز</div>
             <div id="payment-modal-total-price" style="font-size: 1.05rem; font-weight: 800; color: #1e293b;">0 ريال</div>
             <div style="font-size: 0.68rem; color: var(--text-muted);">(Total Price)</div>
           </div>
 
           <!-- Metric 2: Already Paid -->
           <div class="card" style="border: 1px solid rgba(16, 185, 81, 0.4); padding: 10px; text-align: center;">
-            <div style="font-size: 0.72rem; font-weight: 700; color: #05963d; margin-bottom: 4px;">المسدد مسبقاً</div>
+            <div id="payment-modal-paid-label" style="font-size: 0.72rem; font-weight: 700; color: #05963d; margin-bottom: 4px;">المسدد مسبقاً</div>
             <div id="payment-modal-paid-amount" style="font-size: 1.05rem; font-weight: 800; color: #05963d;">0 ريال</div>
             <div style="font-size: 0.68rem; color: #05963d;">(Already Paid)</div>
           </div>
@@ -3492,6 +3492,14 @@
             <div id="payment-modal-remaining-balance" style="font-size: 1.15rem; font-weight: 900; color: #dc2626;">0 ريال</div>
             <div style="font-size: 0.68rem; color: #dc2626;">(Remaining Balance)</div>
           </div>
+        </div>
+
+        <div id="payment-monthly-period-group" class="form-group" style="display: none; margin-bottom: 16px;">
+          <label for="payment-monthly-period-select" style="font-weight: 700; font-size: 0.88rem; color: #1e293b; margin-bottom: 6px; display: block;">
+            شهر الإقامة الذي تخصه الدفعة <span class="field-required" aria-hidden="true">*</span>
+          </label>
+          <select id="payment-monthly-period-select" class="form-control" style="font-size: 0.95rem; font-weight: 600;"></select>
+          <small id="payment-monthly-period-balance" class="form-hint" style="display: block; margin-top: 5px;"></small>
         </div>
 
         <!-- Input Field: New Payment Amount (المبلغ المدفوع الآن) -->

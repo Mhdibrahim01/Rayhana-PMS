@@ -122,6 +122,13 @@ test('monthly extension receipts: independent receipt cycle & clean accounting',
       assert.ok(dashboardHtml.includes('id="invoice-receipt-tabs-bar"'), 'HTML must have invoice-receipt-tabs-bar');
       assert.ok(dashboardHtml.includes('id="invoice-receipt-tabs-container"'), 'HTML must have invoice-receipt-tabs-container');
       assert.ok(dashboardHtml.includes('id="invoice-active-tab-indicator"'), 'HTML must have invoice-active-tab-indicator');
+      assert.ok(dashboardSrc.includes("label: 'كشف الحساب الشامل'"), 'monthly receipt tabs must include a cumulative view');
+      assert.ok(dashboardSrc.includes('monthlyReceiptCyclesByNumber'), 'monthly receipts must be grouped into separate receipt cycles');
+      assert.ok(dashboardSrc.includes('data-cycle-index="${tab.index}"'), 'each receipt cycle must have a selectable tab');
+      assert.ok(dashboardSrc.includes('إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))} (${escapeHtml(cycle.tabLabel)})'), 'the cumulative view must show one row per receipt cycle');
+      assert.ok(dashboardSrc.includes('معاينة: ${currentCycle.tabLabel}'), 'the selected tab preview must show its label and receipt number');
+      assert.ok(dashboardSrc.includes('سند القبض: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(currentCycle.receiptNumber))}</span> — ${formatReceiptMoney(cyclePaid)} ر.س'), 'a multi-month receipt must be shown once with its total amount');
+      assert.ok(!dashboardSrc.includes('الدفعات المرتبطة:'), 'single receipt preview must not show duplicated monthly allocations as separate payments');
 
       // Multi-month duration options in HTML
       assert.ok(dashboardHtml.includes('id="monthly-duration-container"'), 'HTML must have monthly-duration-container');
@@ -273,6 +280,202 @@ test('monthly extension receipts: independent receipt cycle & clean accounting',
       assert.equal(cycleRemaining, 0, 'Remaining must be 0 for paid in full 6-month extension');
 
       assertDatabaseIntegrity(connection, 'multi-month 6-month extension integrity');
+    });
+
+    await t.test('single-month booking with multiple partial payments (installments) generates correct installment receipt tabs and cumulative rows', () => {
+      const room = addRoom('MREC-106', 150);
+      const start1 = today;
+      const monthlyPrice = 2400;
+
+      // 1. Initial booking with 1st payment: 1200 SAR
+      const resResult = appDb.createReservation({
+        guestName: 'نزيل دفعات جزئية',
+        guestPhone: '0555555555',
+        roomId: room.id,
+        checkInDate: start1,
+        totalPrice: monthlyPrice,
+        paidAmount: 1200,
+        bookingType: 'حجز شهري',
+        monthlyPrice: monthlyPrice,
+        monthsCount: 1
+      });
+      assert.ok(resResult && resResult.success);
+      const resId = resResult.reservationId;
+
+      let periods = appDb.getMonthlyBillingPeriods(resId);
+      assert.equal(periods.length, 1, 'Only 1 month period booked');
+      assert.equal(periods[0].remaining, 1200);
+
+      // 2. 2nd payment: 100 SAR
+      const pay2 = appDb.addPaymentToReservation({
+        reservationId: resId,
+        amount: 100,
+        paymentMethod: 'نقداً',
+        monthlyPeriodId: periods[0].id
+      });
+      assert.ok(pay2.success);
+
+      // 3. 3rd payment: 1100 SAR
+      const pay3 = appDb.addPaymentToReservation({
+        reservationId: resId,
+        amount: 1100,
+        paymentMethod: 'نقداً',
+        monthlyPeriodId: periods[0].id
+      });
+      assert.ok(pay3.success);
+
+      periods = appDb.getMonthlyBillingPeriods(resId);
+      assert.equal(periods.length, 1, 'Still exactly 1 month period despite 3 payments');
+      assert.equal(periods[0].amount, 2400);
+      assert.equal(periods[0].remaining, 0);
+      assert.equal(periods[0].payments.length, 3);
+
+      const payments = appDb.getReservationPayments(resId);
+      assert.equal(payments.length, 3);
+
+      // Simulate the exact dashboard.js cycle calculation
+      const monthlyCycles = [];
+      periods.forEach((period, idx) => {
+        const periodPayments = Array.isArray(period.payments) ? period.payments : [];
+        monthlyCycles.push({
+          index: idx,
+          periodId: period.id,
+          title: period.title || `الشهر ${idx + 1}`,
+          startDate: period.startDate,
+          endDate: period.endDate,
+          amount: Number(period.amount || 0),
+          payments: periodPayments,
+          partialItems: Array.isArray(period.partialItems) ? period.partialItems : [],
+          rate: monthlyPrice,
+          monthsCount: 1,
+          durationText: 'شهر',
+          monthGrossCharge: Number(period.monthGrossCharge ?? period.grossCharge ?? 0),
+          grossCharge: Number(period.grossCharge || 0),
+          discount: Number(period.discount || 0),
+          totalCharge: Number(period.totalCharge || 0),
+          paymentMethod: period.paymentMethod || ''
+        });
+      });
+
+      const roundMoney = appDb.roundMoney;
+      const monthlyReceiptCyclesByNumber = new Map();
+      monthlyCycles.forEach(cycle => {
+        let periodAllocatedCumulative = 0;
+        cycle.payments.forEach((payment, paymentIdx) => {
+          const receiptNumber = String(payment.receiptNumber || '').trim();
+          const allocatedAmount = Number(payment.amount || 0);
+          if (!receiptNumber || allocatedAmount <= 0) return;
+
+          const previousAllocatedInPeriod = periodAllocatedCumulative;
+          periodAllocatedCumulative = roundMoney(periodAllocatedCumulative + allocatedAmount);
+
+          let receiptCycle = monthlyReceiptCyclesByNumber.get(receiptNumber);
+          if (!receiptCycle) {
+            receiptCycle = {
+              receiptNumber,
+              startDate: cycle.startDate,
+              endDate: cycle.endDate,
+              amount: 0,
+              payments: [],
+              periodIds: new Set(),
+              periods: [],
+              partialItems: [],
+              rate: cycle.rate,
+              monthsCount: 0,
+              monthGrossCharge: 0,
+              grossCharge: 0,
+              discount: 0,
+              totalCharge: 0,
+              previousPaid: 0,
+              paymentDate: payment.paymentDate || cycle.paymentDate,
+              paymentMethod: payment.paymentMethod || cycle.paymentMethod
+            };
+            monthlyReceiptCyclesByNumber.set(receiptNumber, receiptCycle);
+          }
+
+          receiptCycle.amount = roundMoney(receiptCycle.amount + allocatedAmount);
+          receiptCycle.previousPaid = roundMoney(receiptCycle.previousPaid + previousAllocatedInPeriod);
+          receiptCycle.payments.push({
+            receiptNumber,
+            amount: allocatedAmount,
+            periodId: cycle.periodId,
+            periodTitle: cycle.title,
+            paymentIndex: paymentIdx,
+            periodPaymentsCount: cycle.payments.length
+          });
+          if (!receiptCycle.periodIds.has(cycle.periodId)) {
+            receiptCycle.periodIds.add(cycle.periodId);
+            receiptCycle.periods.push(cycle);
+            receiptCycle.monthsCount += cycle.monthsCount;
+            receiptCycle.monthGrossCharge = roundMoney(receiptCycle.monthGrossCharge + cycle.monthGrossCharge);
+            receiptCycle.grossCharge = roundMoney(receiptCycle.grossCharge + cycle.grossCharge);
+            receiptCycle.discount = roundMoney(receiptCycle.discount + cycle.discount);
+            receiptCycle.totalCharge = roundMoney(receiptCycle.totalCharge + cycle.totalCharge);
+            receiptCycle.partialItems.push(...cycle.partialItems);
+          }
+        });
+      });
+
+      const monthlyReceiptCycles = Array.from(monthlyReceiptCyclesByNumber.values()).map(cycle => {
+        const monthsCount = Number(cycle.monthsCount) || 1;
+        const durationText = cycle.monthsCount === 1 ? 'شهر' : `${monthsCount} أشهر`;
+        cycle.durationText = durationText;
+
+        if (cycle.periods.length === 1) {
+          const period = cycle.periods[0];
+          if (period.payments.length > 1) {
+            const pInfo = cycle.payments.find(p => p.periodId === period.periodId);
+            const defaIdx = (pInfo ? pInfo.paymentIndex : 0) + 1;
+            cycle.tabLabel = `سند ${period.title} - دفعة ${defaIdx}`;
+            cycle.installmentText = `دفعة ${defaIdx}`;
+          } else {
+            cycle.tabLabel = `سند ${period.title} (${durationText})`;
+            cycle.installmentText = '';
+          }
+        }
+        return cycle;
+      });
+
+      assert.equal(monthlyReceiptCycles.length, 3, 'Should have 3 receipt cycles for 3 payments');
+      assert.equal(monthlyReceiptCycles[0].tabLabel, 'سند الشهر الأول - دفعة 1');
+      assert.equal(monthlyReceiptCycles[1].tabLabel, 'سند الشهر الأول - دفعة 2');
+      assert.equal(monthlyReceiptCycles[2].tabLabel, 'سند الشهر الأول - دفعة 3');
+
+      // Verify receipt financial balances (previousPaid + thisPaid + remaining)
+      // Receipt 1 (1200 SAR)
+      const r1 = monthlyReceiptCycles[0];
+      assert.equal(r1.amount, 1200);
+      assert.equal(r1.previousPaid, 0);
+      const r1Cumul = roundMoney(r1.previousPaid + r1.amount);
+      assert.equal(r1Cumul, 1200);
+      assert.equal(roundMoney(r1.totalCharge - r1Cumul), 1200);
+
+      // Receipt 2 (100 SAR)
+      const r2 = monthlyReceiptCycles[1];
+      assert.equal(r2.amount, 100);
+      assert.equal(r2.previousPaid, 1200);
+      const r2Cumul = roundMoney(r2.previousPaid + r2.amount);
+      assert.equal(r2Cumul, 1300);
+      assert.equal(roundMoney(r2.totalCharge - r2Cumul), 1100, 'Remaining after 2nd payment must be 1100, NOT 2300!');
+
+      // Receipt 3 (1100 SAR)
+      const r3 = monthlyReceiptCycles[2];
+      assert.equal(r3.amount, 1100);
+      assert.equal(r3.previousPaid, 1300);
+      const r3Cumul = roundMoney(r3.previousPaid + r3.amount);
+      assert.equal(r3Cumul, 2400);
+      assert.equal(roundMoney(r3.totalCharge - r3Cumul), 0, 'Remaining after 3rd payment must be 0, NOT 1300!');
+
+      // Cumulative view rows verification
+      const displayedCycles = monthlyCycles.map(cycle => ({
+        ...cycle,
+        tabLabel: cycle.title,
+        monthGrossCharge: Number(cycle.monthGrossCharge ?? cycle.grossCharge ?? 0)
+      }));
+      assert.equal(displayedCycles.length, 1, 'Cumulative statement must show exactly 1 row for Month 1, NOT 3 rows!');
+      assert.equal(displayedCycles[0].monthGrossCharge, 2400);
+
+      assertDatabaseIntegrity(connection, 'monthly partial payment installments integrity');
     });
   });
 });

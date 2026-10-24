@@ -111,6 +111,9 @@
   const paymentModalPaidAmount = document.getElementById('payment-modal-paid-amount');
   const paymentModalRemainingBalance = document.getElementById('payment-modal-remaining-balance');
   const paymentNewAmount = document.getElementById('payment-new-amount');
+  const paymentMonthlyPeriodGroup = document.getElementById('payment-monthly-period-group');
+  const paymentMonthlyPeriodSelect = document.getElementById('payment-monthly-period-select');
+  const paymentMonthlyPeriodBalance = document.getElementById('payment-monthly-period-balance');
   const paymentMethodSelectModal = document.getElementById('payment-method-select-modal');
   const btnClosePaymentModal = document.getElementById('btn-close-payment-modal');
   const btnCancelPaymentModal = document.getElementById('btn-cancel-payment-modal');
@@ -212,7 +215,7 @@
   const MONTHLY_PACKAGE_NIGHTS = 30;
   function getMonthlyPackageTotal(effectiveRate, discount) {
     const months = arguments.length > 2 ? Math.max(1, parseInt(arguments[2], 10) || 1) : 1;
-    return Math.max(0, roundMoney((effectiveRate * months) - (discount || 0)));
+    return Math.max(0, roundMoney((effectiveRate * months) - ((discount || 0) * months)));
   }
   function getOperationalBusinessDate() {
     return App.State.businessDate || '';
@@ -668,6 +671,12 @@
 
   function calculatePrice(forceSyncPaid = false) {
     const bType = bookingTypeSelect ? bookingTypeSelect.value : 'عادي';
+    const discountLabel = document.querySelector('label[for="discount-amount-input"]');
+    const discountHint = discountAmountInput?.parentElement?.querySelector('.form-hint');
+    if (bType !== 'حجز شهري') {
+      if (discountLabel) discountLabel.textContent = 'قيمة الخصم (ر.س)';
+      if (discountHint) discountHint.textContent = 'يُخصم مباشرة من إجمالي الإقامة';
+    }
 
     const selectedOption = roomSelect ? roomSelect.options[roomSelect.selectedIndex] : null;
     const defaultRoomPrice = selectedOption
@@ -712,6 +721,8 @@
     if (bType === 'حجز شهري') {
       const durationSelect = document.getElementById('monthly-duration-select');
       const months = (durationSelect && parseInt(durationSelect.value, 10)) || 1;
+      if (discountLabel) discountLabel.textContent = 'الخصم لكل شهر (ر.س)';
+      if (discountHint) discountHint.textContent = 'يُخصم من كل شهر كامل من مدة الإقامة.';
       if (checkInInput.value) {
         const calendarOut = months > 1 ? getCalendarMonthCheckOut(checkInInput.value, months) : getCalendarMonthCheckOut(checkInInput.value);
         if (calendarOut) checkOutInput.value = calendarOut;
@@ -722,6 +733,7 @@
       const durationBadge = document.getElementById('monthly-duration-badge');
       const packageSubtotal = roundMoney(effectiveRate);
       const totalMonthlyCharge = roundMoney(packageSubtotal * months);
+      const totalMonthlyDiscount = roundMoney(discount * months);
       if (durationBadge) {
         const mLabel = months === 1 ? '1 شهر تقويمي' : (months === 2 ? 'شهران تقويميان' : `${months} أشهر تقويمية`);
         durationBadge.textContent = `${mLabel} (${totalMonthlyCharge.toLocaleString()} ر.س)`;
@@ -731,7 +743,7 @@
         const monthsText = months === 1 ? 'شهر' : (months === 2 ? 'شهران' : `${months} أشهر`);
         if (discount > 0) {
           priceCalculationBreakdown.style.display = 'inline';
-          priceCalculationBreakdown.textContent = `(${monthsText} × ${effectiveRate.toLocaleString()} = ${totalMonthlyCharge.toFixed(2)} - خصم: ${discount.toFixed(2)})`;
+          priceCalculationBreakdown.textContent = `(${monthsText} × ${effectiveRate.toLocaleString()} = ${totalMonthlyCharge.toFixed(2)} - خصم ${monthsText}: ${totalMonthlyDiscount.toFixed(2)})`;
         } else if (months > 1) {
           priceCalculationBreakdown.style.display = 'inline';
           priceCalculationBreakdown.textContent = `(${monthsText} × ${effectiveRate.toLocaleString()} = ${totalMonthlyCharge.toFixed(2)} ر.س)`;
@@ -2537,6 +2549,39 @@
   // =========================================================================
 
   let currentPayingReservation = null;
+  let currentPayingMonthlyPeriods = [];
+  const getSelectedMonthlyPaymentPeriod = () => {
+    const selectedId = Number(paymentMonthlyPeriodSelect?.value || 0);
+    return currentPayingMonthlyPeriods.find(period => Number(period.id) === selectedId) || null;
+  };
+  function updateMonthlyPaymentSelection({ fillAmount = false } = {}) {
+    if (!currentPayingReservation || currentPayingReservation.booking_type !== 'حجز شهري') return;
+    const period = getSelectedMonthlyPaymentPeriod();
+    const balance = Math.max(0, roundMoney(period?.remaining || 0));
+    const totalLabel = document.getElementById('payment-modal-total-label');
+    const paidLabel = document.getElementById('payment-modal-paid-label');
+    const saveButton = document.getElementById('btn-save-payment');
+    if (totalLabel) totalLabel.textContent = 'استحقاق الشهر المختار';
+    if (paidLabel) paidLabel.textContent = 'المسدد عن هذا الشهر';
+    if (paymentModalTotalPrice) paymentModalTotalPrice.textContent = `${roundMoney(period?.totalCharge || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ريال`;
+    if (paymentModalPaidAmount) paymentModalPaidAmount.textContent = `${roundMoney(period?.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ريال`;
+    if (paymentModalRemainingBalance) {
+      paymentModalRemainingBalance.textContent = `${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ريال`;
+      paymentModalRemainingBalance.style.color = balance > 0 ? '#dc2626' : '#05963d';
+    }
+    if (paymentMonthlyPeriodBalance) {
+      const receipts = (period?.payments || []).map(payment => `${payment.receiptNumber} (${roundMoney(payment.amount).toFixed(2)} ر.س)`).join('، ');
+      paymentMonthlyPeriodBalance.textContent = period
+        ? `المتبقي على ${period.title}: ${balance.toFixed(2)} ر.س${receipts ? ` | السندات المرتبطة: ${receipts}` : ''}`
+        : 'لا توجد فترة إقامة عليها رصيد متبقٍ.';
+    }
+    if (paymentNewAmount) {
+      paymentNewAmount.max = balance > 0 ? balance.toFixed(2) : '0';
+      if (fillAmount) paymentNewAmount.value = balance > 0 ? balance.toFixed(2) : '';
+      else if (Number(paymentNewAmount.value) - balance > 0.005) paymentNewAmount.value = balance > 0 ? balance.toFixed(2) : '';
+    }
+    if (saveButton) saveButton.disabled = !period || balance <= 0.005;
+  }
   const getReservationPaidForPayments = (reservation) => {
     const useLedgerBalance = reservation?.status === 'ملغي جزئي' && reservation?.payment_status === 'مدفوع جزئياً';
     const amount = useLedgerBalance ? reservation.ledger_paid_amount : reservation?.paid_amount;
@@ -2576,7 +2621,20 @@
     }
 
     currentPayingReservation = res;
+    currentPayingMonthlyPeriods = [];
     const isContract = res.booking_type === 'عقد مفتوح';
+    const isMonthly = res.booking_type === 'حجز شهري';
+    if (isMonthly) {
+      try {
+        const periodsResult = await window.api.getMonthlyBillingPeriods(targetId);
+        if (!periodsResult?.success) throw new Error(periodsResult?.error || 'تعذر تحميل فترات الإقامة الشهرية.');
+        currentPayingMonthlyPeriods = Array.isArray(periodsResult.data) ? periodsResult.data : [];
+      } catch (err) {
+        currentPayingReservation = null;
+        showToast(err.message || 'تعذر تحميل فترات الإقامة الشهرية.', 'error');
+        return;
+      }
+    }
     const businessToday = window.DashboardApp.State.businessDate || getLocalDateString();
     const checkOutDateStr = String(res.check_out_date || '').slice(0, 10);
     const isOverdue = res.status === 'مؤكد' && !isContract && checkOutDateStr && checkOutDateStr < businessToday;
@@ -2640,6 +2698,36 @@
       }
     }
 
+    if (paymentMonthlyPeriodGroup) paymentMonthlyPeriodGroup.style.display = isMonthly ? 'block' : 'none';
+    if (paymentMonthlyPeriodSelect) {
+      paymentMonthlyPeriodSelect.required = isMonthly;
+      paymentMonthlyPeriodSelect.innerHTML = isMonthly
+        ? `<option value="">اختر شهر الإقامة</option>${currentPayingMonthlyPeriods.map(period => {
+          const remaining = Math.max(0, roundMoney(period.remaining || 0));
+          const status = remaining > 0.005 ? `متبقي ${remaining.toFixed(2)} ر.س` : 'مسدد بالكامل';
+          return `<option value="${Number(period.id)}" ${remaining <= 0.005 ? 'disabled' : ''}>${escapeHtml(period.title)} (${formatArabicDateRange(period.startDate, period.endDate)}) — ${status}</option>`;
+        }).join('')}`
+        : '';
+      if (isMonthly) {
+        const firstOutstanding = currentPayingMonthlyPeriods.find(period => Number(period.remaining) > 0.005);
+        if (firstOutstanding) paymentMonthlyPeriodSelect.value = String(firstOutstanding.id);
+      }
+    }
+    if (isMonthly) {
+      const totalLabel = document.getElementById('payment-modal-total-label');
+      const paidLabel = document.getElementById('payment-modal-paid-label');
+      if (totalLabel) totalLabel.textContent = 'استحقاق الشهر المختار';
+      if (paidLabel) paidLabel.textContent = 'المسدد عن هذا الشهر';
+      updateMonthlyPaymentSelection({ fillAmount: true });
+    } else {
+      const totalLabel = document.getElementById('payment-modal-total-label');
+      const paidLabel = document.getElementById('payment-modal-paid-label');
+      if (totalLabel) totalLabel.textContent = 'إجمالي الحجز';
+      if (paidLabel) paidLabel.textContent = 'المسدد مسبقاً';
+      const saveButton = document.getElementById('btn-save-payment');
+      if (saveButton) saveButton.disabled = false;
+    }
+
     modal.style.display = 'flex';
     setTimeout(() => {
       if (inputAmount) {
@@ -2657,6 +2745,7 @@
       addPaymentForm.reset();
     }
     currentPayingReservation = null;
+    currentPayingMonthlyPeriods = [];
   }
 
   if (btnClosePaymentModal) {
@@ -2676,6 +2765,11 @@
   if (btnPayFullRemaining) {
     btnPayFullRemaining.addEventListener('click', () => {
       if (!currentPayingReservation) return;
+      if (currentPayingReservation.booking_type === 'حجز شهري') {
+        updateMonthlyPaymentSelection({ fillAmount: true });
+        if (paymentNewAmount) paymentNewAmount.focus();
+        return;
+      }
       const total = roundMoney(currentPayingReservation.total_price || 0);
       const paid = getReservationPaidForPayments(currentPayingReservation);
       const isContract = currentPayingReservation.booking_type === 'عقد مفتوح';
@@ -2688,12 +2782,17 @@
     });
   }
 
+  if (paymentMonthlyPeriodSelect) {
+    paymentMonthlyPeriodSelect.addEventListener('change', () => updateMonthlyPaymentSelection({ fillAmount: true }));
+  }
+
   if (addPaymentForm) {
     addPaymentForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const resId = parseInt(paymentReservationId.value, 10);
       const newAmount = roundMoney(paymentNewAmount.value);
       const method = paymentMethodSelectModal ? paymentMethodSelectModal.value : 'نقداً';
+      const monthlyPeriod = currentPayingReservation?.booking_type === 'حجز شهري' ? getSelectedMonthlyPaymentPeriod() : null;
 
       if (!resId || isNaN(resId)) {
         showToast('معرف الحجز غير صالح.', 'error');
@@ -2702,6 +2801,17 @@
       if (!Number.isFinite(newAmount) || newAmount <= 0) {
         showToast('يرجى إدخال مبلغ سداد صحيح وموجب أكبر من الصفر.', 'error');
         return;
+      }
+
+      if (currentPayingReservation?.booking_type === 'حجز شهري') {
+        if (!monthlyPeriod) {
+          showToast('يرجى اختيار شهر الإقامة الذي تخصه الدفعة.', 'error');
+          return;
+        }
+        if (newAmount - Number(monthlyPeriod.remaining || 0) > 0.005) {
+          showToast(`المبلغ المدخل يتجاوز المتبقي على ${monthlyPeriod.title} (${Number(monthlyPeriod.remaining || 0).toLocaleString()} ريال).`, 'error');
+          return;
+        }
       }
 
       if (currentPayingReservation && currentPayingReservation.booking_type !== 'عقد مفتوح') {
@@ -2727,6 +2837,7 @@
           reservationId: resId,
           newAmount: newAmount,
           paymentMethod: method,
+          monthlyPeriodId: monthlyPeriod?.id || null,
           userId: activeUserId ? parseInt(activeUserId, 10) : null
         });
 
@@ -3593,7 +3704,7 @@
         : parseFloat(currentExtendingReservation.price_per_night || 0);
     }
 
-    const discountAmount = Math.max(0, parseFloat(extendDiscountInput ? extendDiscountInput.value : 0) || 0);
+    const discountPerMonth = Math.max(0, parseFloat(extendDiscountInput ? extendDiscountInput.value : 0) || 0);
     const currentTotal = roundMoney(currentExtendingReservation.total_price || 0);
 
     if (!newDateStr || newDateStr <= oldDateStr) {
@@ -3624,25 +3735,37 @@
 
     let extMonths = 0;
     if (isMonthlyReservation && monthlyRate > 0 && typeof getCalendarMonthCheckOut === 'function') {
-      for (let m = 1; m <= 12; m++) {
-        if (newDateStr === getCalendarMonthCheckOut(oldDateStr, m)) {
-          extMonths = m;
-          break;
-        }
+      for (let m = 1; m <= 120; m++) {
+        const boundary = getCalendarMonthCheckOut(oldDateStr, m);
+        if (!boundary || boundary > newDateStr) break;
+        extMonths = m;
       }
     }
 
+    const fullMonthEnd = isMonthlyReservation && extMonths > 0
+      ? getCalendarMonthCheckOut(oldDateStr, extMonths)
+      : oldDateStr;
+    const partialNights = isMonthlyReservation && fullMonthEnd < newDateStr
+      ? Math.max(0, Math.round((Date.parse(`${newDateStr}T00:00:00Z`) - Date.parse(`${fullMonthEnd}T00:00:00Z`)) / 86400000))
+      : (isMonthlyReservation ? 0 : currentCalcExtraNights);
+
     let baseCost;
-    if (extMonths > 0) {
-      baseCost = roundMoney(extMonths * monthlyRate);
+    if (isMonthlyReservation) {
+      baseCost = roundMoney((extMonths * monthlyRate) + (partialNights * nightlyRate));
       const monthsLabel = extMonths === 1 ? 'شهر تقويمي' : (extMonths === 2 ? 'شهران تقويميان' : `${extMonths} أشهر تقويمية`);
-      if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${baseCost.toLocaleString()} ر.س (${monthsLabel})`;
+      const durationParts = [];
+      if (extMonths > 0) durationParts.push(monthsLabel);
+      if (partialNights > 0) durationParts.push(`${partialNights} ${partialNights === 1 ? 'ليلة' : 'ليالٍ'} إضافية`);
+      if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${baseCost.toLocaleString()} ر.س (${durationParts.join(' + ') || 'ليالٍ إضافية'})`;
     } else {
       baseCost = roundMoney(currentCalcExtraNights * nightlyRate);
       if (extendCalcRatePreview) extendCalcRatePreview.textContent = `${nightlyRate.toLocaleString()} ر.س`;
     }
 
-    currentCalcAdditionalCost = Math.max(0, roundMoney(baseCost - discountAmount));
+    const appliedDiscount = isMonthlyReservation
+      ? roundMoney(discountPerMonth * extMonths)
+      : discountPerMonth;
+    currentCalcAdditionalCost = Math.max(0, roundMoney(baseCost - appliedDiscount));
     currentCalcNewTotal = roundMoney(currentTotal + currentCalcAdditionalCost);
 
     const nightsLabel = currentCalcExtraNights === 1 ? 'ليلة واحدة' : (currentCalcExtraNights === 2 ? 'ليلتين' : `${currentCalcExtraNights} ليالٍ`);
@@ -3650,13 +3773,22 @@
     if (extendAdditionalCostPreview) extendAdditionalCostPreview.textContent = `+${currentCalcAdditionalCost.toLocaleString()} ر.س`;
     
     if (extendDiscountBadge) {
-      if (discountAmount > 0) {
-        extendDiscountBadge.textContent = `(خصم: -${discountAmount.toLocaleString()} ر.س)`;
+      if (appliedDiscount > 0) {
+        extendDiscountBadge.textContent = isMonthlyReservation && extMonths > 1
+          ? `(خصم شهري: ${discountPerMonth.toLocaleString()} × ${extMonths} = -${appliedDiscount.toLocaleString()} ر.س)`
+          : `(خصم: -${appliedDiscount.toLocaleString()} ر.س)`;
         extendDiscountBadge.style.display = 'block';
       } else {
         extendDiscountBadge.style.display = 'none';
       }
     }
+
+    const extendDiscountLabel = document.querySelector('label[for="extend-discount-input"]');
+    const extendDiscountHint = extendDiscountInput?.parentElement?.querySelector('small');
+    if (extendDiscountLabel && isMonthlyReservation) extendDiscountLabel.textContent = 'الخصم لكل شهر كامل (ر.س)';
+    else if (extendDiscountLabel) extendDiscountLabel.textContent = 'خصم على التمديد (ر.س)';
+    if (extendDiscountHint && isMonthlyReservation) extendDiscountHint.textContent = 'يُطبق على الأشهر الكاملة فقط، ولا يُخصم من الليالي الإضافية.';
+    else if (extendDiscountHint) extendDiscountHint.textContent = '(خصم خاص يخصم من التكلفة)';
 
     if (extendNewTotalPreview) extendNewTotalPreview.textContent = `${currentCalcNewTotal.toLocaleString()} ر.س`;
 
@@ -3954,7 +4086,7 @@
 
           if (typeof openInvoiceModal === 'function' && (res.isMonthly || res.receiptNumber)) {
             setTimeout(() => {
-              openInvoiceModal(numResId, { receiptNumber: res.receiptNumber || null });
+              openInvoiceModal(numResId);
             }, 350);
           }
         } else {

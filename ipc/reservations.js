@@ -345,7 +345,7 @@ module.exports = function registerReservationsIpc(ipcMain, { db, session, helper
     if (denied) return denied;
     try {
       await ensureOpenBusinessDateIsCurrent();
-      const { reservationId, newAmount, amount, paymentMethod, userId, notes } = data || {};
+      const { reservationId, newAmount, amount, paymentMethod, userId, notes, monthlyPeriodId } = data || {};
       const targetId = parseInt(reservationId, 10);
       const payVal = db.roundMoney(newAmount !== undefined ? newAmount : amount);
 
@@ -363,7 +363,8 @@ module.exports = function registerReservationsIpc(ipcMain, { db, session, helper
         amount: payVal,
         paymentMethod: paymentMethod || 'نقداً',
         userId: activeUserId,
-        notes: notes || 'سداد دفعة إقامة'
+        notes: notes || 'سداد دفعة إقامة',
+        monthlyPeriodId
       });
       return result;
     } catch (err) {
@@ -463,7 +464,23 @@ module.exports = function registerReservationsIpc(ipcMain, { db, session, helper
     try {
       const data = db.getReservationById(reservationId);
       if (!data) return { success: false, error: 'لم يتم العثور على بيانات الحجز.' };
+      if (data.booking_type === 'حجز شهري') {
+        data.monthly_billing_periods = db.getMonthlyBillingPeriods(reservationId);
+      }
       return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('reservations:get-monthly-billing-periods', async (event, reservationId) => {
+    const denied = requireSession();
+    if (denied) return denied;
+    try {
+      const reservation = db.getReservationById(reservationId);
+      if (!reservation) return { success: false, error: 'الحجز غير موجود.' };
+      if (reservation.booking_type !== 'حجز شهري') return { success: true, data: [] };
+      return { success: true, data: db.getMonthlyBillingPeriods(reservationId) };
     } catch (err) {
       return { success: false, error: err.message };
     }

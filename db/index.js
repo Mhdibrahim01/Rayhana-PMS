@@ -82,6 +82,7 @@ module.exports = {
   cancelReservation: reservations.cancelReservation,
   addPaymentToReservation: reservations.addPaymentToReservation,
   getReservationPayments: reservations.getReservationPayments,
+  getMonthlyBillingPeriods: reservations.getMonthlyBillingPeriods,
   getReservationDepositMovements: reservations.getReservationDepositMovements,
   reconcileLegacyDeposit: reservations.reconcileLegacyDeposit,
   getPaymentReceipt: reservations.getPaymentReceipt,

@@ -69,19 +69,17 @@ function createBusinessDayScheduler({ db, powerMonitor, getMainWindow = () => nu
 
       const firstClosedDate = openDate;
       let advancedDays = 0;
-      let reconciliationRequired = false;
       while (openDate < targetDate) {
         const nextDate = addCalendarDay(openDate);
         const result = db.runNightAudit(null, openDate, {
           closedBy: 'system',
           now: clock(),
           maxBusinessDate: targetDate,
-          markShiftReconciliation: nextDate === targetDate
+          markShiftReconciliation: false
         });
         if (!result?.success || !result.advanced) break;
         openDate = result.currentBusinessDate;
         advancedDays += 1;
-        reconciliationRequired ||= Boolean(result.shiftReconciliationRequired);
       }
 
       if (advancedDays) {
@@ -89,7 +87,7 @@ function createBusinessDayScheduler({ db, powerMonitor, getMainWindow = () => nu
         const payload = {
           businessDate: openDate,
           closedDays: advancedDays,
-          shiftReconciliationRequired: reconciliationRequired
+          shiftReconciliationRequired: false
         };
         const mainWindow = getMainWindow();
         if (mainWindow && !mainWindow.isDestroyed()) {

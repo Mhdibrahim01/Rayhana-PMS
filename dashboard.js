@@ -772,10 +772,12 @@
       const invoiceDurationText = (isContractPolicy && bookedNights)
         ? `${bookedNights} ${bookedNights === 1 ? 'ليلة' : 'ليالٍ'} (قيمة العقد)`
         : stayDurationText;
-      const initialStayMonths = (isMonthly && !isActualPolicy) ? Math.max(1, parseInt(inv.monthly_months_count, 10) || 1) : 1;
-      const monthlyPackageSubtotal = roundMoney((monthlyRate * initialStayMonths) + monthlyExtensionAmount);
-      const discount = (isMonthly && !isActualPolicy)
-        ? Math.max(0, roundMoney(monthlyPackageSubtotal - storedTotal))
+      const monthlyBillingPeriods = Array.isArray(inv.monthly_billing_periods) ? inv.monthly_billing_periods : [];
+      const monthlyPackageSubtotal = isMonthly && monthlyBillingPeriods.length
+        ? roundMoney(monthlyBillingPeriods.reduce((sum, period) => sum + Number(period.grossCharge || 0), 0))
+        : roundMoney(total + rawDiscount);
+      const discount = (isMonthly && !isActualPolicy && monthlyBillingPeriods.length)
+        ? roundMoney(monthlyBillingPeriods.reduce((sum, period) => sum + Number(period.discount || 0), 0))
         : rawDiscount;
       const baseSubtotal = (typeof invoiceNights === 'number' && invoiceNights > 0)
         ? (invoiceNights * effectiveNightlyRate)
@@ -796,6 +798,21 @@
         return match ? `${String(match[1]).padStart(2, '0')}:${match[2]}` : '-';
       };
       const formatReceiptMoney = value => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0);
+      const renderMonthlyPartialRows = items => (Array.isArray(items) ? items : []).map(item => {
+        const startDate = formatReceiptDate(item.startDate);
+        const endDate = formatReceiptDate(item.endDate);
+        const nights = Math.max(1, Math.round((Date.parse(`${String(item.endDate).slice(0, 10)}T00:00:00Z`) - Date.parse(`${String(item.startDate).slice(0, 10)}T00:00:00Z`)) / 86400000));
+        const gross = Number(item.grossAmount || 0);
+        const discountNote = Number(item.discount || 0) > 0.005 ? 'خصم محفوظ ضمن بيانات العقد القديم' : 'بلا خصم شهري';
+        return `
+          <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 12px 14px;"><div style="font-weight: 700; color: #334155;">ليالٍ إضافية (${nights} ${nights === 1 ? 'ليلة' : 'ليالٍ'})</div><div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">من <bdi dir="ltr">${startDate}</bdi> إلى <bdi dir="ltr">${endDate}</bdi> — ${discountNote}</div></td>
+            <td style="padding: 12px 14px; text-align: center; color: #475569;">${formatReceiptMoney(gross / nights)} ر.س/ليلة</td>
+            <td style="padding: 12px 14px; text-align: center; color: #475569;">${nights} ${nights === 1 ? 'ليلة' : 'ليالٍ'}</td>
+            <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #334155;">+ ${formatReceiptMoney(gross)} ر.س</td>
+          </tr>
+        `;
+      }).join('');
       const formatReceiptDateTime = value => {
         const normalizedValue = receiptDigits(value).trim();
         if (!normalizedValue) return '-';
@@ -1037,233 +1054,170 @@
 
       // Monthly booking cycle management
       const monthlyCycles = [];
-      if (isMonthly) {
-        const positivePayments = reservationPaymentsList.filter(p => parseFloat(p.amount) > 0);
-        if (positivePayments.length > 0) {
-          let runningStart = inv.check_in_date ? String(inv.check_in_date).slice(0, 10) : '';
-          const initialStayGross = roundMoney(monthlyRate * initialStayMonths);
-          const initialStayNet = Math.max(0, roundMoney(storedTotal - monthlyExtensionAmount));
-          const initialStayDiscount = Math.min(discount, Math.max(0, roundMoney(initialStayGross - initialStayNet)));
-          let remainingDiscountPool = discount;
-
-          positivePayments.forEach((p, idx) => {
-            const pStart = (p.period_start_date ? String(p.period_start_date).slice(0, 10) : '') || runningStart;
-            let pEnd = p.period_end_date ? String(p.period_end_date).slice(0, 10) : '';
-            if (!pEnd) {
-              const nextP = positivePayments[idx + 1];
-              if (nextP && nextP.period_start_date) {
-                pEnd = String(nextP.period_start_date).slice(0, 10);
-              } else if (idx === positivePayments.length - 1 && inv.check_out_date) {
-                pEnd = String(inv.check_out_date).slice(0, 10);
-              } else if (pStart) {
-                const dt = new Date(`${pStart}T00:00:00Z`);
-                dt.setUTCDate(dt.getUTCDate() + 30);
-                pEnd = dt.toISOString().slice(0, 10);
-              }
-            }
-            if (pEnd) runningStart = pEnd;
-            const pAmount = parseFloat(p.amount) || 0;
-            let cycleMonths = 1;
-            if (pStart && pEnd) {
-              const [sy, sm, sd] = pStart.split('-').map(Number);
-              for (let m = 1; m <= 36; m++) {
-                const lastDayOfTarget = new Date(sy, sm + m, 0).getDate();
-                const clampedDay = Math.min(sd, lastDayOfTarget);
-                const targetMonth = new Date(sy, sm - 1 + m, 1);
-                const expectedEnd = `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
-                if (pEnd === expectedEnd) {
-                  cycleMonths = m;
-                  break;
-                }
-              }
-              if (cycleMonths === 1) {
-                const [ey, em, ed] = pEnd.split('-').map(Number);
-                if (Number.isFinite(sy) && Number.isFinite(sm) && Number.isFinite(ey) && Number.isFinite(em)) {
-                  const diffM = (ey - sy) * 12 + (em - sm);
-                  if (diffM >= 1 && Math.abs(ed - sd) <= 3) {
-                    cycleMonths = diffM;
-                  }
-                }
-              }
-            }
-            if (cycleMonths === 1 && monthlyRate > 0 && pAmount >= monthlyRate * 1.5) {
-              const fallbackM = Math.round(pAmount / monthlyRate);
-              if (fallbackM >= 1) cycleMonths = fallbackM;
-            }
-
-            let cycleDurationText = 'شهر';
-            if (cycleMonths === 2) {
-              cycleDurationText = 'شهران';
-            } else if (cycleMonths >= 3 && cycleMonths <= 10) {
-              cycleDurationText = `${cycleMonths} أشهر`;
-            } else if (cycleMonths > 10) {
-              cycleDurationText = `${cycleMonths} شهراً`;
-            }
-
-            const cycleNames = ['الشهر الأول', 'الشهر الثاني', 'الشهر الثالث', 'الشهر الرابع', 'الشهر الخامس', 'الشهر السادس', 'الشهر السابع', 'الشهر الثامن', 'الشهر التاسع', 'الشهر العاشر', 'الشهر الحادي عشر', 'الشهر الثاني عشر'];
-            const baseTitle = cycleNames[idx] || `الشهر ${idx + 1}`;
-            const cycleTitle = cycleMonths > 1 ? `${baseTitle} (${cycleDurationText})` : baseTitle;
-            const cycleGrossCharge = roundMoney(monthlyRate * cycleMonths);
-
-            let cycleDiscount = 0;
-            if (positivePayments.length === 1) {
-              cycleDiscount = discount;
-            } else if (idx === 0) {
-              cycleDiscount = initialStayDiscount;
-              remainingDiscountPool = Math.max(0, roundMoney(remainingDiscountPool - cycleDiscount));
-            } else {
-              const extDiscMatch = String(p.notes || '').match(/\[خصم تمديد:\s*([\d.]+)\s*ر\.س\]/);
-              if (extDiscMatch) {
-                cycleDiscount = parseFloat(extDiscMatch[1]) || 0;
-              } else if (remainingDiscountPool > 0) {
-                cycleDiscount = Math.min(remainingDiscountPool, Math.max(0, roundMoney(cycleGrossCharge - pAmount)));
-              }
-              remainingDiscountPool = Math.max(0, roundMoney(remainingDiscountPool - cycleDiscount));
-            }
-
-            const cycleTotalCharge = Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
-
-            monthlyCycles.push({
-              index: idx,
-              title: cycleTitle,
-              receiptNumber: p.receipt_number,
-              paymentDate: p.payment_date,
-              startDate: pStart,
-              endDate: pEnd,
-              amount: pAmount,
-              rate: monthlyRate,
-              monthsCount: cycleMonths,
-              durationText: cycleDurationText,
-              grossCharge: cycleGrossCharge,
-              discount: cycleDiscount,
-              totalCharge: cycleTotalCharge,
-              paymentMethod: p.payment_method || inv.payment_method || '',
-              user: p.username || ''
-            });
-          });
-        } else {
-          let initMonths = parseInt(inv.monthly_months_count, 10) || 1;
-          const initStart = inv.check_in_date ? String(inv.check_in_date).slice(0, 10) : '';
-          const initEnd = inv.check_out_date ? String(inv.check_out_date).slice(0, 10) : '';
-          if (initMonths <= 1 && initStart && initEnd) {
-            const [sy, sm, sd] = initStart.split('-').map(Number);
-            for (let m = 1; m <= 36; m++) {
-              const lastDayOfTarget = new Date(sy, sm + m, 0).getDate();
-              const clampedDay = Math.min(sd, lastDayOfTarget);
-              const targetMonth = new Date(sy, sm - 1 + m, 1);
-              const expectedEnd = `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
-              if (initEnd === expectedEnd) {
-                initMonths = m;
-                break;
-              }
-            }
-          }
-          let initDurationText = 'شهر';
-          if (initMonths === 2) initDurationText = 'شهران';
-          else if (initMonths >= 3 && initMonths <= 10) initDurationText = `${initMonths} أشهر`;
-          else if (initMonths > 10) initDurationText = `${initMonths} شهراً`;
-
-          const cycleGrossCharge = roundMoney(monthlyRate * initMonths);
-          const cycleDiscount = discount;
-          const cycleTotalCharge = Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
-
+      if (isMonthly && !isActualPolicy && !isCancelled) {
+        monthlyBillingPeriods.forEach((period, idx) => {
+          const periodPayments = Array.isArray(period.payments) ? period.payments : [];
           monthlyCycles.push({
-            index: 0,
-            title: initMonths > 1 ? `الشهر الأول (${initDurationText})` : 'الشهر الأول',
-            receiptNumber: null,
-            paymentDate: inv.created_at,
-            startDate: initStart,
-            endDate: initEnd,
-            amount: 0,
+            index: idx,
+            periodId: period.id,
+            title: period.title || `الشهر ${idx + 1}`,
+            receiptNumber: periodPayments.length ? periodPayments[periodPayments.length - 1].receiptNumber : null,
+            paymentDate: period.paymentDate || inv.created_at,
+            startDate: period.startDate,
+            endDate: period.endDate,
+            amount: Number(period.amount || 0),
+            payments: periodPayments,
+            partialItems: Array.isArray(period.partialItems) ? period.partialItems : [],
             rate: monthlyRate,
-            monthsCount: initMonths,
-            durationText: initDurationText,
-            grossCharge: cycleGrossCharge,
-            discount: cycleDiscount,
-            totalCharge: cycleTotalCharge,
-            paymentMethod: inv.payment_method || '',
-            user: ''
+            monthsCount: 1,
+            durationText: 'شهر',
+            monthGrossCharge: Number(period.monthGrossCharge ?? period.grossCharge ?? 0),
+            grossCharge: Number(period.grossCharge || 0),
+            discount: Number(period.discount || 0),
+            totalCharge: Number(period.totalCharge || 0),
+            paymentMethod: period.paymentMethod || inv.payment_method || '',
+            isLegacy: Boolean(period.isLegacy)
           });
-        }
+        });
       }
 
+      const monthlyReceiptCyclesByNumber = new Map();
+      monthlyCycles.forEach(cycle => {
+        let periodAllocatedCumulative = 0;
+        cycle.payments.forEach((payment, paymentIdx) => {
+          const receiptNumber = String(payment.receiptNumber || '').trim();
+          const allocatedAmount = Number(payment.amount || 0);
+          if (!receiptNumber || allocatedAmount <= 0) return;
+
+          const previousAllocatedInPeriod = periodAllocatedCumulative;
+          periodAllocatedCumulative = roundMoney(periodAllocatedCumulative + allocatedAmount);
+
+          let receiptCycle = monthlyReceiptCyclesByNumber.get(receiptNumber);
+          if (!receiptCycle) {
+            receiptCycle = {
+              receiptNumber,
+              startDate: cycle.startDate,
+              endDate: cycle.endDate,
+              amount: 0,
+              payments: [],
+              periodIds: new Set(),
+              periods: [],
+              partialItems: [],
+              rate: cycle.rate,
+              monthsCount: 0,
+              monthGrossCharge: 0,
+              grossCharge: 0,
+              discount: 0,
+              totalCharge: 0,
+              previousPaid: 0,
+              paymentDate: payment.paymentDate || cycle.paymentDate,
+              paymentMethod: payment.paymentMethod || cycle.paymentMethod
+            };
+            monthlyReceiptCyclesByNumber.set(receiptNumber, receiptCycle);
+          }
+
+          receiptCycle.amount = roundMoney(receiptCycle.amount + allocatedAmount);
+          receiptCycle.previousPaid = roundMoney(receiptCycle.previousPaid + previousAllocatedInPeriod);
+          receiptCycle.payments.push({
+            receiptNumber,
+            amount: allocatedAmount,
+            periodId: cycle.periodId,
+            periodTitle: cycle.title,
+            paymentIndex: paymentIdx,
+            periodPaymentsCount: cycle.payments.length,
+            paymentDate: payment.paymentDate || cycle.paymentDate,
+            paymentMethod: payment.paymentMethod || cycle.paymentMethod
+          });
+          if (!receiptCycle.periodIds.has(cycle.periodId)) {
+            receiptCycle.periodIds.add(cycle.periodId);
+            receiptCycle.periods.push(cycle);
+            receiptCycle.startDate = cycle.startDate < receiptCycle.startDate ? cycle.startDate : receiptCycle.startDate;
+            receiptCycle.endDate = cycle.endDate > receiptCycle.endDate ? cycle.endDate : receiptCycle.endDate;
+            receiptCycle.monthsCount += cycle.monthsCount;
+            receiptCycle.monthGrossCharge = roundMoney(receiptCycle.monthGrossCharge + cycle.monthGrossCharge);
+            receiptCycle.grossCharge = roundMoney(receiptCycle.grossCharge + cycle.grossCharge);
+            receiptCycle.discount = roundMoney(receiptCycle.discount + cycle.discount);
+            receiptCycle.totalCharge = roundMoney(receiptCycle.totalCharge + cycle.totalCharge);
+            receiptCycle.partialItems.push(...cycle.partialItems);
+          }
+        });
+      });
+      const monthNames = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
+      const monthlyReceiptCycles = Array.from(monthlyReceiptCyclesByNumber.values()).map((cycle, index) => {
+        const monthsCount = Number(cycle.monthsCount) || 1;
+        const durationText = cycle.monthsCount === 1
+          ? 'شهر'
+          : (monthsCount === 2 ? 'شهران' : (monthsCount <= 10 ? `${monthsCount} أشهر` : `${monthsCount} شهراً`));
+        cycle.durationText = durationText;
+
+        if (cycle.periods.length === 1) {
+          const period = cycle.periods[0];
+          if (period.payments.length > 1) {
+            const pInfo = cycle.payments.find(p => p.periodId === period.periodId);
+            const defaIdx = (pInfo ? pInfo.paymentIndex : 0) + 1;
+            cycle.tabLabel = `سند ${period.title} - دفعة ${defaIdx}`;
+            cycle.installmentText = `دفعة ${defaIdx}`;
+          } else {
+            cycle.tabLabel = `سند ${period.title} (${durationText})`;
+            cycle.installmentText = '';
+          }
+        } else if (cycle.periods.length > 1) {
+          const periodTitles = cycle.periods.map(p => p.title).join(' و ');
+          cycle.tabLabel = `سند ${periodTitles} (${durationText})`;
+          cycle.installmentText = '';
+        } else {
+          const monthName = monthNames[index] || `${index + 1}`;
+          cycle.tabLabel = `سند الشهر ${monthName} (${durationText})`;
+          cycle.installmentText = '';
+        }
+
+        cycle.periodIds = undefined;
+        return cycle;
+      });
       let selectedCycleIndex = -1;
-      if (isMonthly) {
-        if (options && options.receiptNumber) {
-          const matchIdx = monthlyCycles.findIndex(c => c.receiptNumber === options.receiptNumber);
-          if (matchIdx !== -1) selectedCycleIndex = matchIdx;
-        }
-        if (selectedCycleIndex === -1 && (!options || !options.showCumulative)) {
-          selectedCycleIndex = monthlyCycles.length > 0 ? (monthlyCycles.length - 1) : 0;
-        }
+      if (options && options.receiptNumber) {
+        const initialIdx = monthlyReceiptCycles.findIndex(c => c.receiptNumber === options.receiptNumber);
+        if (initialIdx !== -1) selectedCycleIndex = initialIdx;
       }
 
       const invoiceTabsBar = document.getElementById('invoice-receipt-tabs-bar');
       const invoiceTabsContainer = document.getElementById('invoice-receipt-tabs-container');
-      const invoiceTabIndicator = document.getElementById('invoice-active-tab-indicator');
+      const invoiceActiveTabIndicator = document.getElementById('invoice-active-tab-indicator');
 
       const invoiceRenderer = {
-        ['render']: (mode) => {
-          if (typeof mode === 'number') {
-            selectedCycleIndex = mode;
-          } else if (mode === 'cumulative') {
-            selectedCycleIndex = -1;
+        ['render']: () => {
+          if (invoiceTabsBar) {
+            invoiceTabsBar.style.display = monthlyReceiptCycles.length ? 'flex' : 'none';
+          }
+          if (invoiceTabsContainer) {
+            const tabs = [
+              ...monthlyReceiptCycles.map((cycle, index) => ({
+                index,
+                label: cycle.tabLabel
+              })),
+              { index: -1, label: 'كشف الحساب الشامل' }
+            ];
+            invoiceTabsContainer.innerHTML = tabs.map(tab => `
+              <button type="button" data-cycle-index="${tab.index}" aria-pressed="${selectedCycleIndex === tab.index}"
+                style="border: 1px solid ${selectedCycleIndex === tab.index ? '#4338ca' : '#cbd5e1'}; background: ${selectedCycleIndex === tab.index ? '#eef2ff' : '#fff'}; color: ${selectedCycleIndex === tab.index ? '#3730a3' : '#475569'}; padding: 6px 10px; border-radius: 7px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+                ${escapeHtml(tab.label)}
+              </button>
+            `).join('');
+            invoiceTabsContainer.querySelectorAll('button[data-cycle-index]').forEach(button => {
+              button.addEventListener('click', () => {
+                selectedCycleIndex = Number(button.dataset.cycleIndex);
+                invoiceRenderer['render']();
+              });
+            });
           }
 
-          if (invoiceTabsBar && invoiceTabsContainer) {
-            if (isMonthly && monthlyCycles.length > 1) {
-              invoiceTabsBar.style.display = 'flex';
-              invoiceTabsContainer.innerHTML = '';
-
-              monthlyCycles.forEach((c, idx) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                const isSelected = (selectedCycleIndex === idx);
-                btn.className = `btn btn-sm invoice-receipt-tab-btn${isSelected ? ' active' : ''}`;
-                btn.textContent = `سند ${c.title}`;
-                btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
-                btn.addEventListener('click', (e) => {
-                  e.preventDefault();
-                  if (selectedCycleIndex !== idx) {
-                    invoiceRenderer['render'](idx);
-                  }
-                });
-                invoiceTabsContainer.appendChild(btn);
-              });
-
-              const cumBtn = document.createElement('button');
-              cumBtn.type = 'button';
-              const isCumSelected = (selectedCycleIndex === -1);
-              cumBtn.className = `btn btn-sm invoice-receipt-tab-btn${isCumSelected ? ' active' : ''}`;
-              cumBtn.textContent = 'كشف الحساب الشامل';
-              cumBtn.setAttribute('aria-pressed', isCumSelected ? 'true' : 'false');
-              cumBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                if (selectedCycleIndex !== -1) {
-                  invoiceRenderer['render']('cumulative');
-                }
-              });
-              invoiceTabsContainer.appendChild(cumBtn);
-
-              if (invoiceTabIndicator) {
-                if (selectedCycleIndex === -1) {
-                  const totalMonthsAllCycles = monthlyCycles.reduce((sum, c) => sum + (c.monthsCount || 1), 0);
-                  const totalMonthsLabel = totalMonthsAllCycles === 1
-                    ? 'شهر تقويمي واحد'
-                    : (totalMonthsAllCycles === 2 ? 'شهران تقويميان' : (totalMonthsAllCycles <= 10 ? `${totalMonthsAllCycles} أشهر تقويمية` : `${totalMonthsAllCycles} شهراً تقويمياً`));
-                  invoiceTabIndicator.textContent = `معاينة: كشف الحساب الشامل لجميع فترات الإقامة (${totalMonthsLabel})`;
-                } else {
-                  const activeC = monthlyCycles[selectedCycleIndex];
-                  invoiceTabIndicator.textContent = `معاينة: سند ${activeC.title} (${activeC.startDate} إلى ${activeC.endDate}) - رقم السند: ${activeC.receiptNumber || invoiceNum}`;
-                }
-              }
-            } else {
-              invoiceTabsBar.style.display = 'none';
-            }
+          const isSingleCycleView = isMonthly && selectedCycleIndex >= 0 && selectedCycleIndex < monthlyReceiptCycles.length;
+          const currentCycle = isSingleCycleView ? monthlyReceiptCycles[selectedCycleIndex] : null;
+          if (invoiceActiveTabIndicator) {
+            invoiceActiveTabIndicator.textContent = isSingleCycleView && currentCycle
+              ? `معاينة: ${currentCycle.tabLabel} (${formatReceiptDate(currentCycle.startDate)} إلى ${formatReceiptDate(currentCycle.endDate)}) - رقم السند: ${currentCycle.receiptNumber}`
+              : `معاينة: كشف الحساب الشامل لجميع فترات الإقامة (${monthlyCycles.reduce((sum, cycle) => sum + Number(cycle.monthsCount || 1), 0)} شهراً تقريباً)`;
           }
-
-          const isSingleCycleView = isMonthly && selectedCycleIndex >= 0 && selectedCycleIndex < monthlyCycles.length;
-          const currentCycle = isSingleCycleView ? monthlyCycles[selectedCycleIndex] : null;
 
           let displayReceiptNum = invoiceNum;
           let displayPrintDate = printDate;
@@ -1275,7 +1229,7 @@
           let displayPaymentMethod = escapeHtml(receiptDigits(inv.payment_method || 'نقداً'));
 
           if (isSingleCycleView && currentCycle) {
-            displayReceiptNum = currentCycle.receiptNumber || invoiceNum;
+            displayReceiptNum = escapeHtml(receiptDigits(currentCycle.receiptNumber));
             if (currentCycle.paymentDate) {
               const dtFormatted = formatReceiptDateTime(currentCycle.paymentDate);
               if (dtFormatted && dtFormatted !== '-') {
@@ -1284,19 +1238,21 @@
               }
             }
             const cyclePaid = currentCycle.amount;
+            const cyclePrevPaid = currentCycle.previousPaid || 0;
+            const cycleCumulativePaid = roundMoney(cyclePrevPaid + cyclePaid);
             const cycleRate = currentCycle.rate;
             const cycleGrossCharge = currentCycle.grossCharge || roundMoney(cycleRate * (currentCycle.monthsCount || 1));
             const cycleDiscount = currentCycle.discount || 0;
             const cycleTotalCharge = currentCycle.totalCharge !== undefined
               ? currentCycle.totalCharge
               : Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
-            const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cyclePaid));
-            const cycleStatusBadge = cycleRemaining <= 0.005 ? '\u0645\u062f\u0641\u0648\u0639\u0020\u0628\u0627\u0644\u0643\u0627\u0645\u0644' : (cyclePaid > 0 ? '\u0645\u062f\u0641\u0648\u0639\u0020\u062c\u0632\u0626\u064a\u0627\u064b' : '\u063a\u064a\u0631\u0020\u0645\u062f\u0641\u0648\u0639');
+            const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cycleCumulativePaid));
+            const cycleStatusBadge = cycleRemaining <= 0.005 ? 'مدفوع بالكامل' : (cycleCumulativePaid > 0 ? 'مدفوع جزئياً' : 'غير مدفوع');
             displayPaymentBadgeHtml = window.DashboardApp.Helpers.getPaymentStatusBadge(cycleStatusBadge);
             displayCheckIn = formatReceiptDate(currentCycle.startDate);
             displayCheckOut = formatReceiptDate(currentCycle.endDate);
             displayDuration = currentCycle.durationText || 'شهر';
-            displayPaymentMethod = escapeHtml(receiptDigits(currentCycle.paymentMethod || inv.payment_method || '\u0646\u0642\u062f\u0627\u064b'));
+            displayPaymentMethod = escapeHtml(receiptDigits(currentCycle.paymentMethod || inv.payment_method || 'نقداً'));
           }
 
           let itemsTableRowsHtml = '';
@@ -1305,12 +1261,15 @@
           if (isSingleCycleView && currentCycle) {
             const cycleRate = currentCycle.rate;
             const cyclePaid = currentCycle.amount;
+            const cyclePrevPaid = currentCycle.previousPaid || 0;
+            const cycleCumulativePaid = roundMoney(cyclePrevPaid + cyclePaid);
             const cycleGrossCharge = currentCycle.grossCharge || roundMoney(cycleRate * (currentCycle.monthsCount || 1));
+            const cycleMonthGrossCharge = currentCycle.monthGrossCharge ?? cycleGrossCharge;
             const cycleDiscount = currentCycle.discount || 0;
             const cycleTotalCharge = currentCycle.totalCharge !== undefined
               ? currentCycle.totalCharge
               : Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
-            const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cyclePaid));
+            const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cycleCumulativePaid));
 
             itemsTableRowsHtml = `
               <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -1318,12 +1277,14 @@
                   <div style="font-weight: 700; color: #1e293b;">إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))}</div>
                   <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">
                     نوع الوحدة: ${escapeHtml(receiptDigits(inv.room_type || 'عادية'))} | الفترة: <bdi dir="ltr">${displayCheckIn}</bdi> إلى <bdi dir="ltr">${displayCheckOut}</bdi>
+                    ${currentCycle.receiptNumber ? `<div style="margin-top: 3px;">سند القبض: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(currentCycle.receiptNumber))}</span> — ${formatReceiptMoney(cyclePaid)} ر.س${currentCycle.installmentText ? ` (${currentCycle.installmentText})` : ''}</div>` : '<div style="margin-top: 3px; color: #b91c1c;">لا يوجد سند قبض لهذه الفترة</div>'}
                   </div>
                 </td>
                 <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cycleRate)} ر.س</td>
                 <td style="padding: 14px; text-align: center; font-weight: 700; color: #475569;">${currentCycle.durationText || 'شهر'}</td>
-                <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cycleGrossCharge)} ر.س</td>
+                <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cycleMonthGrossCharge)} ر.س</td>
               </tr>
+              ${renderMonthlyPartialRows(currentCycle.partialItems)}
               ${cycleDiscount > 0 ? `
                 <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
                   <td style="padding: 12px 14px;">
@@ -1350,7 +1311,7 @@
 
             totalsCardHtml = `
               <div class="receipt-totals-card">
-                ${cycleDiscount > 0 ? `
+                ${isMonthly || cycleDiscount > 0 ? `
                   <div class="receipt-total-line">
                     <span>المجموع قبل الخصم:</span>
                     <span dir="ltr">${formatReceiptMoney(cycleGrossCharge)} ر.س</span>
@@ -1364,10 +1325,25 @@
                   <span>الإجمالي الصافي:</span>
                   <span dir="ltr">${formatReceiptMoney(cycleTotalCharge)} ر.س</span>
                 </div>
-                <div class="receipt-total-line receipt-total-paid">
-                  <span>المبلغ المدفوع:</span>
-                  <span dir="ltr">${formatReceiptMoney(cyclePaid)} ر.س</span>
-                </div>
+                ${cyclePrevPaid > 0 ? `
+                  <div class="receipt-total-line">
+                    <span>المسدد سابقاً:</span>
+                    <span dir="ltr">${formatReceiptMoney(cyclePrevPaid)} ر.س</span>
+                  </div>
+                  <div class="receipt-total-line receipt-total-paid">
+                    <span>المدفوع في هذا السند:</span>
+                    <span dir="ltr">${formatReceiptMoney(cyclePaid)} ر.س</span>
+                  </div>
+                  <div class="receipt-total-line" style="font-weight: 700; color: #1e293b;">
+                    <span>إجمالي المسدد حتى هذا السند:</span>
+                    <span dir="ltr">${formatReceiptMoney(cycleCumulativePaid)} ر.س</span>
+                  </div>
+                ` : `
+                  <div class="receipt-total-line receipt-total-paid">
+                    <span>المبلغ المدفوع:</span>
+                    <span dir="ltr">${formatReceiptMoney(cyclePaid)} ر.س</span>
+                  </div>
+                `}
                 <div class="receipt-total-line receipt-total-remaining" style="color: ${cycleRemaining > 0 ? '#dc2626' : '#05963d'};">
                   <span>المبلغ المتبقي:</span>
                   <span dir="ltr">${formatReceiptMoney(cycleRemaining)} ر.س</span>
@@ -1376,35 +1352,43 @@
             `;
           } else {
             // Cumulative or Standard View
-            const extensionMonthsCount = monthlyCycles.slice(1).reduce((sum, c) => sum + (c.monthsCount || 1), 0);
-            const extraDaysFee = isMonthly ? Math.max(0, roundMoney(monthlyExtensionAmount - (extensionMonthsCount * monthlyRate))) : 0;
+            if (isMonthly && monthlyCycles.length > 0) {
+              const displayedCycles = monthlyCycles.map(cycle => {
+                const paymentsList = Array.isArray(cycle.payments) ? cycle.payments.filter(p => (
+                  String(p.receiptNumber || '').trim() && Number(p.amount) > 0
+                )) : [];
+                let receiptNumberText = '';
+                if (paymentsList.length === 1) {
+                  receiptNumberText = `سند رقم: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(paymentsList[0].receiptNumber))}</span> (${formatReceiptMoney(paymentsList[0].amount)} ر.س)`;
+                } else if (paymentsList.length > 1) {
+                  const items = paymentsList.map((p, idx) => `دفعة ${idx + 1} [سند <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(p.receiptNumber))}</span>]: ${formatReceiptMoney(p.amount)} ر.س`).join(' ، ');
+                  receiptNumberText = `سندات القبض المسددة: ${items}`;
+                } else {
+                  receiptNumberText = '<span style="color: #b91c1c;">لا توجد دفعة مسجلة لهذه الفترة</span>';
+                }
+                return {
+                  ...cycle,
+                  tabLabel: cycle.title,
+                  receiptNumberText,
+                  monthGrossCharge: Number(cycle.monthGrossCharge ?? cycle.grossCharge ?? 0)
+                };
+              });
 
-            if (isMonthly && monthlyCycles.length > 1) {
-              itemsTableRowsHtml = monthlyCycles.map((cyc) => `
+              itemsTableRowsHtml = displayedCycles.map(cycle => `
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                   <td style="padding: 14px;">
-                    <div style="font-weight: 700; color: #1e293b;">إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))} (${cyc.title})</div>
+                    <div style="font-weight: 700; color: #1e293b;">إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))} (${escapeHtml(cycle.tabLabel)})</div>
                     <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">
-                      الفترة من <bdi dir="ltr">${formatReceiptDate(cyc.startDate)}</bdi> إلى <bdi dir="ltr">${formatReceiptDate(cyc.endDate)}</bdi>
-                      ${cyc.receiptNumber ? ` | سند رقم: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(cyc.receiptNumber))}</span>` : ''}
+                      الفترة من <bdi dir="ltr">${formatReceiptDate(cycle.startDate)}</bdi> إلى <bdi dir="ltr">${formatReceiptDate(cycle.endDate)}</bdi>
+                      ${cycle.receiptNumberText ? ` | ${cycle.receiptNumberText}` : ''}
                     </div>
                   </td>
-                  <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cyc.rate)} ر.س</td>
-                  <td style="padding: 14px; text-align: center; font-weight: 700; color: #475569;">${cyc.durationText || 'شهر'}</td>
-                  <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cyc.grossCharge || cyc.totalCharge || cyc.rate)} ر.س</td>
+                  <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cycle.rate)} ر.س</td>
+                  <td style="padding: 14px; text-align: center; font-weight: 700; color: #475569;">${escapeHtml(cycle.durationText || 'شهر')}</td>
+                  <td style="padding: 14px; text-align: left; font-weight: 800; color: #1e1b4b;">${formatReceiptMoney(cycle.monthGrossCharge ?? cycle.grossCharge ?? 0)} ر.س</td>
                 </tr>
+                ${renderMonthlyPartialRows(cycle.partialItems)}
               `).join('');
-
-              if (extraDaysFee > 0 && !isCancelled) {
-                itemsTableRowsHtml += `
-                  <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                    <td style="padding: 12px 14px;"><div style="font-weight: 700; color: #334155;">رسوم ليالٍ إضافية</div></td>
-                    <td style="padding: 12px 14px; text-align: center; color: #475569;">${formatReceiptMoney(effectiveNightlyRate)} ر.س/يوم</td>
-                    <td style="padding: 12px 14px; text-align: center; color: #475569;">-</td>
-                    <td style="padding: 12px 14px; text-align: left; font-weight: 800; color: #334155;">+ ${formatReceiptMoney(extraDaysFee)} ر.س</td>
-                  </tr>
-                `;
-              }
             } else {
               let monthlyStandardDurationText = 'شهر';
               if (isMonthly) {
@@ -1520,10 +1504,10 @@
 
             totalsCardHtml = `
               <div class="receipt-totals-card">
-                ${discount > 0 && !isCancelled ? `
+                ${(discount > 0 || (isMonthly && !isCancelled)) && !isCancelled ? `
                   <div class="receipt-total-line">
                     <span>المجموع قبل الخصم:</span>
-                    <span dir="ltr">${formatReceiptMoney(total + discount)} ر.س</span>
+                    <span dir="ltr">${formatReceiptMoney(isMonthly ? shownSubtotal : roundMoney(total + discount))} ر.س</span>
                   </div>
                   <div class="receipt-total-line receipt-total-discount">
                     <span>الخصم المعتمد:</span>
@@ -1593,10 +1577,10 @@
                 <!-- Receipt Info (Left) -->
                 <div style="background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 14px 18px; text-align: right; min-width: 220px;">
                   <div style="display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 800; margin-bottom: 10px;">
-                    ${isCancelled ? 'سند حجز ملغي' : 'سند'}
+                    ${isCancelled ? 'سند حجز ملغي' : (isMonthly ? 'سند إقامة موحد للحجز' : 'سند')}
                   </div>
                   <div style="font-size: 0.85rem; color: #475569; line-height: 1.7;">
-                    <div><span style="font-weight: 700; color: #1e293b;">رقم السند:</span> <span style="font-family: monospace; color: #4338ca; font-weight: 700;">${displayReceiptNum}</span></div>
+                    <div><span style="font-weight: 700; color: #1e293b;">${isMonthly ? 'رقم مستند الإقامة:' : 'رقم السند:'}</span> <span style="font-family: monospace; color: #4338ca; font-weight: 700;">${displayReceiptNum}</span></div>
                     <div>تاريخ الإصدار: <bdi dir="ltr" style="white-space: nowrap;">${displayPrintDate}</bdi></div>
                     <div>الوقت: <bdi dir="ltr" style="white-space: nowrap;">${escapeHtml(displayPrintTime)}</bdi></div>
                   </div>
@@ -1728,13 +1712,21 @@
               ` : ''}
 
               <div class="receipt-payment-notice">
-                <div>
-                  <span style="font-weight: 700; color: #1e293b;">طريقة السداد:</span>
-                  <span style="color: #475569; margin-right: 4px;">${displayPaymentMethod}</span>
-                </div>
-                <div>
-                  هذا المستند سند استلام رسمي ومعتمد
-                </div>
+                ${isMonthly ? `
+                  <div>
+                    <span style="font-weight: 700; color: #1e293b;">${isSingleCycleView ? 'رقم سند القبض:' : 'سندات القبض:'}</span>
+                    <span style="color: #475569; margin-right: 4px;">${isSingleCycleView && currentCycle
+                      ? escapeHtml(receiptDigits(currentCycle.receiptNumber))
+                      : 'موضحة بجوار كل فترة إقامة في الجدول أعلاه.'}</span>
+                  </div>
+                  <div>${isSingleCycleView ? 'هذا مستند مستقل لفترة السداد المحددة.' : 'هذا مستند إقامة موحد يشمل جميع أشهر الحجز والتمديدات.'}</div>
+                ` : `
+                  <div>
+                    <span style="font-weight: 700; color: #1e293b;">طريقة السداد:</span>
+                    <span style="color: #475569; margin-right: 4px;">${displayPaymentMethod}</span>
+                  </div>
+                  <div>هذا المستند سند استلام رسمي ومعتمد</div>
+                `}
               </div>
 
               <!-- Policies and totals stay together below the items table. -->
@@ -1771,7 +1763,7 @@
         }
       };
 
-      invoiceRenderer['render'](selectedCycleIndex);
+      invoiceRenderer['render']();
 
       if (invoiceModal) {
         invoiceModal.style.display = 'flex';

@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('api', {
   cancelReservation: (reservationId) => ipcRenderer.invoke('reservations:cancel', reservationId),
   addPayment: (paymentData) => ipcRenderer.invoke('add-payment', paymentData),
   getReservationPayments: (reservationId) => ipcRenderer.invoke('payments:get-by-reservation', reservationId),
+  getMonthlyBillingPeriods: (reservationId) => ipcRenderer.invoke('reservations:get-monthly-billing-periods', reservationId),
   getReservationDepositMovements: (reservationId) => ipcRenderer.invoke('deposits:get-by-reservation', reservationId),
   reconcileLegacyDeposit: (data) => ipcRenderer.invoke('deposits:reconcile-legacy', data),
   getPaymentReceipt: (receiptIdentifier) => ipcRenderer.invoke('payments:get-receipt', receiptIdentifier),

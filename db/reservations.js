@@ -509,6 +509,7 @@ function createReservation({
     ? discountAmount
     : (discount_amount !== undefined && discount_amount !== null && discount_amount !== '' ? discount_amount : 0);
   const normDiscountAmount = Math.max(0, roundMoney(rawDiscount));
+  let persistedDiscountAmount = normDiscountAmount;
   const normDiscountReason = (discountReason || discount_reason || '').trim();
   if (normDiscountAmount > 0 && !normDiscountReason) {
     throw new Error('سبب الخصم مطلوب ولا يمكن إتمام العملية بدونه.');
@@ -594,7 +595,11 @@ function createReservation({
       }
     }
     const baseTotal = roundMoney(monthlyRateSnapshot * stayMonths);
-    total = Math.max(0, roundMoney(baseTotal - normDiscountAmount));
+    if (normDiscountAmount > monthlyRateSnapshot + 0.005) {
+      throw new Error('الخصم الشهري لا يمكن أن يتجاوز سعر الشهر الواحد.');
+    }
+    persistedDiscountAmount = roundMoney(normDiscountAmount * stayMonths);
+    total = Math.max(0, roundMoney(baseTotal - persistedDiscountAmount));
 
     // A monthly booking has an authoritative total: flat monthly rate - discount.
     // A caller-supplied total used to silently replace it, which is how total_price
@@ -621,7 +626,7 @@ function createReservation({
       throw new Error('تاريخ المغادرة يجب أن يكون بعد تاريخ الوصول بشكل محدد.');
     }
 
-    if (total <= 0 && normDiscountAmount === 0) {
+    if (total <= 0 && persistedDiscountAmount === 0) {
       throw new Error('إجمالي قيمة الحجز الشهري يجب أن يكون أكبر من الصفر.');
     }
     if (roundMoney(paid - total) > 0.005) {
@@ -748,7 +753,7 @@ function createReservation({
       monthlyRateSnapshot,
       0,
       finalStayMonths,
-      normDiscountAmount,
+      persistedDiscountAmount,
       normDiscountReason,
       finalIsEarlyCheckin,
       finalActualCheckInAt
@@ -757,6 +762,17 @@ function createReservation({
 
     const createdRes = queryOne("SELECT id FROM reservations ORDER BY id DESC LIMIT 1");
     const newReservationId = createdRes.id;
+
+    const initialMonthlyPeriodIds = normBookingType === 'حجز شهري'
+      ? createInitialMonthlyPeriods({
+        reservationId: newReservationId,
+        startDate: checkInDate,
+        endDate: computedCheckOutDate,
+        months: finalStayMonths,
+        monthlyRate: monthlyRateSnapshot,
+        discountPerMonth: normDiscountAmount
+      })
+      : [];
 
     if (Array.isArray(companions) && companions.length > 0) {
       const compStmt = db.prepare(`
@@ -820,6 +836,10 @@ function createReservation({
         isMonthlyBooking ? cleanCheckOut : null
       ]);
       payStmt.free();
+      if (isMonthlyBooking) {
+        const paymentId = Number(queryOne('SELECT last_insert_rowid() AS id')?.id || 0);
+        insertMonthlyPaymentAllocations(paymentId, paid, initialMonthlyPeriodIds, newReservationId);
+      }
     }
 
     // The entered deposit is money received now, tracked separately from accommodation payments.
@@ -914,6 +934,454 @@ function countNights(startDate, endDate) {
     const targetMonthStart = new Date(y, m - 1 + numMonths, 1);
     return `${targetMonthStart.getFullYear()}-${String(targetMonthStart.getMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
   }
+
+function getFullMonthsAndRemainder(startDate, endDate) {
+  const start = String(startDate || '').slice(0, 10);
+  const end = String(endDate || '').slice(0, 10);
+  let months = 0;
+  for (let candidate = 1; candidate <= 120; candidate++) {
+    const boundary = getCalendarMonthCheckOut(start, candidate);
+    if (!boundary || boundary > end) break;
+    months = candidate;
+  }
+  const fullMonthEnd = months > 0 ? getCalendarMonthCheckOut(start, months) : start;
+  return {
+    months,
+    fullMonthEnd,
+    partialNights: fullMonthEnd && fullMonthEnd < end ? countNights(fullMonthEnd, end) : 0
+  };
+}
+
+function insertMonthlyStayPeriod({
+  reservationId,
+  periodIndex,
+  periodKind,
+  startDate,
+  endDate,
+  grossAmount,
+  discountAmount = 0,
+  parentPeriodId = null,
+  isLegacy = false
+}) {
+  const gross = roundMoney(grossAmount);
+  const discount = roundMoney(discountAmount);
+  const net = Math.max(0, roundMoney(gross - discount));
+  const stmt = db.prepare(`
+    INSERT INTO monthly_stay_periods (
+      reservation_id, period_index, period_kind, period_start_date, period_end_date,
+      gross_amount, discount_amount, net_amount, parent_period_id, is_legacy
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run([
+    reservationId,
+    periodIndex,
+    periodKind,
+    startDate,
+    endDate,
+    gross,
+    discount,
+    net,
+    parentPeriodId,
+    isLegacy ? 1 : 0
+  ]);
+  stmt.free();
+  return Number(queryOne('SELECT last_insert_rowid() AS id')?.id || 0);
+}
+
+function createInitialMonthlyPeriods({ reservationId, startDate, endDate, months, monthlyRate, discountPerMonth }) {
+  const periodIds = [];
+  let periodStart = String(startDate).slice(0, 10);
+  for (let index = 1; index <= months; index++) {
+    const periodEnd = index === months && endDate
+      ? String(endDate).slice(0, 10)
+      : getCalendarMonthCheckOut(startDate, index);
+    periodIds.push(insertMonthlyStayPeriod({
+      reservationId,
+      periodIndex: index,
+      periodKind: 'month',
+      startDate: periodStart,
+      endDate: periodEnd,
+      grossAmount: monthlyRate,
+      discountAmount: discountPerMonth
+    }));
+    periodStart = periodEnd;
+  }
+  return periodIds;
+}
+
+function createMonthlyExtensionPeriods({
+  reservationId,
+  oldCheckOutDate,
+  newCheckOutDate,
+  monthlyRate,
+  nightlyRate,
+  discountPerMonth,
+  fullMonths,
+  partialNights
+}) {
+  const currentRows = queryAll(`
+    SELECT id, period_index FROM monthly_stay_periods
+    WHERE reservation_id = ? AND period_kind = 'month'
+    ORDER BY period_index ASC, id ASC
+  `, [reservationId]);
+  let periodIndex = currentRows.reduce((max, row) => Math.max(max, Number(row.period_index) || 0), 0);
+  const newPeriodIds = [];
+  let periodStart = String(oldCheckOutDate).slice(0, 10);
+  for (let month = 1; month <= fullMonths; month++) {
+    const periodEnd = getCalendarMonthCheckOut(oldCheckOutDate, month);
+    const id = insertMonthlyStayPeriod({
+      reservationId,
+      periodIndex: ++periodIndex,
+      periodKind: 'month',
+      startDate: periodStart,
+      endDate: periodEnd,
+      grossAmount: monthlyRate,
+      discountAmount: discountPerMonth
+    });
+    newPeriodIds.push(id);
+    periodStart = periodEnd;
+  }
+
+  if (partialNights > 0) {
+    const parentPeriodId = newPeriodIds[newPeriodIds.length - 1]
+      || (currentRows.length ? Number(currentRows[currentRows.length - 1].id) : null);
+    insertMonthlyStayPeriod({
+      reservationId,
+      periodIndex: periodIndex + 1,
+      periodKind: 'partial_nights',
+      startDate: periodStart,
+      endDate: String(newCheckOutDate).slice(0, 10),
+      grossAmount: roundMoney(partialNights * nightlyRate),
+      discountAmount: 0,
+      parentPeriodId
+    });
+  }
+  return newPeriodIds;
+}
+
+function splitAmountAcrossPeriods(amount, rows, weights) {
+  const total = Math.max(0, roundMoney(amount));
+  if (!rows.length) return [];
+  const weightTotal = weights.reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
+  let remaining = total;
+  return rows.map((_, index) => {
+    if (index === rows.length - 1) return roundMoney(remaining);
+    const share = weightTotal > 0
+      ? roundMoney(total * (Math.max(0, Number(weights[index]) || 0) / weightTotal))
+      : roundMoney(total / rows.length);
+    const bounded = Math.min(remaining, Math.max(0, share));
+    remaining = roundMoney(remaining - bounded);
+    return bounded;
+  });
+}
+
+/**
+ * Additive, idempotent data migration for pre-existing monthly reservations.
+ * Historical totals and discounts remain authoritative; period amounts are
+ * allocated proportionally so the generated ledger reconciles exactly to them.
+ */
+function ensureMonthlyStayPeriods(reservationId, reservation = null) {
+  const existing = queryAll('SELECT id FROM monthly_stay_periods WHERE reservation_id = ? LIMIT 1', [reservationId]);
+  if (existing.length) return;
+  const res = reservation || queryOne(`
+    SELECT r.*, rm.price_per_night, rm.monthly_price
+    FROM reservations r LEFT JOIN rooms rm ON rm.id = r.room_id
+    WHERE r.id = ?
+  `, [reservationId]);
+  if (!res || res.booking_type !== 'حجز شهري') return;
+
+  const start = String(res.check_in_date || '').slice(0, 10);
+  const end = String(res.booked_check_out_date || res.check_out_date || '').slice(0, 10);
+  const monthlyRate = Number(res.monthly_rate_snapshot) > 0
+    ? roundMoney(res.monthly_rate_snapshot)
+    : (Number(res.monthly_price) > 0 ? roundMoney(res.monthly_price) : roundMoney(Number(res.price_per_night || 0) * MONTHLY_PACKAGE_NIGHTS));
+  const initialMonths = Math.max(1, parseInt(res.monthly_months_count, 10) || 1);
+  const specs = [];
+  let cursor = start;
+
+  if (start && end && monthlyRate > 0) {
+    for (let month = 1; month <= initialMonths; month++) {
+      const monthEnd = getCalendarMonthCheckOut(start, month);
+      if (!monthEnd || monthEnd > end) break;
+      specs.push({ kind: 'month', start: cursor, end: monthEnd, weight: monthlyRate });
+      cursor = monthEnd;
+    }
+    while (cursor && cursor < end && specs.length < 240) {
+      const monthEnd = getCalendarMonthCheckOut(cursor, 1);
+      if (!monthEnd || monthEnd > end) break;
+      specs.push({ kind: 'month', start: cursor, end: monthEnd, weight: monthlyRate });
+      cursor = monthEnd;
+    }
+    if (cursor && cursor < end) {
+      const nights = countNights(cursor, end);
+      if (nights > 0) {
+        specs.push({
+          kind: 'partial_nights',
+          start: cursor,
+          end,
+          weight: roundMoney(nights * (Number(res.price_per_night) > 0 ? Number(res.price_per_night) : monthlyRate / 30))
+        });
+      }
+    }
+  }
+
+  if (!specs.length) {
+    specs.push({
+      kind: 'month',
+      start: start || '0001-01-01',
+      end: end || start || '0001-02-01',
+      weight: Math.max(0, roundMoney(Number(res.total_price || 0) + Number(res.discount_amount || 0)))
+    });
+  }
+
+  const historicalGross = Math.max(0, roundMoney(Number(res.total_price || 0) + Number(res.discount_amount || 0)));
+  const historicalDiscount = Math.max(0, roundMoney(res.discount_amount || 0));
+  const grossShares = splitAmountAcrossPeriods(historicalGross, specs, specs.map(spec => spec.weight));
+  const discountShares = splitAmountAcrossPeriods(historicalDiscount, specs, specs.map(spec => spec.weight));
+  const persistedMonthIds = [];
+  specs.forEach((spec, index) => {
+    const parentPeriodId = spec.kind === 'partial_nights' ? persistedMonthIds[persistedMonthIds.length - 1] : null;
+    const id = insertMonthlyStayPeriod({
+      reservationId,
+      periodIndex: spec.kind === 'month' ? persistedMonthIds.length + 1 : persistedMonthIds.length + 1,
+      periodKind: spec.kind,
+      startDate: spec.start,
+      endDate: spec.end,
+      grossAmount: grossShares[index],
+      discountAmount: discountShares[index],
+      parentPeriodId,
+      isLegacy: true
+    });
+    if (spec.kind === 'month') persistedMonthIds.push(id);
+  });
+}
+
+function insertExactMonthlyPaymentAllocation(paymentId, periodId, amount) {
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO monthly_payment_allocations (payment_id, period_id, allocated_amount)
+    VALUES (?, ?, ?)
+  `);
+  stmt.run([paymentId, periodId, roundMoney(amount)]);
+  stmt.free();
+}
+
+function insertMonthlyPaymentAllocations(paymentId, amount, periodIds, reservationId) {
+  let remaining = Math.max(0, roundMoney(amount));
+  const currentPeriods = getMonthlyBillingPeriods(reservationId, { ignoredPaymentIds: [paymentId] });
+  const remainingByPeriod = new Map(currentPeriods.map(period => [period.id, period.remaining]));
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO monthly_payment_allocations (payment_id, period_id, allocated_amount)
+    VALUES (?, ?, ?)
+  `);
+  for (const periodId of periodIds) {
+    if (remaining <= 0.005) break;
+    const outstanding = Math.max(0, roundMoney(remainingByPeriod.get(Number(periodId)) || 0));
+    const allocation = Math.min(remaining, outstanding);
+    if (allocation > 0.005) {
+      stmt.run([paymentId, periodId, allocation]);
+      remaining = roundMoney(remaining - allocation);
+    }
+  }
+  stmt.free();
+  return roundMoney(remaining);
+}
+
+function getMonthlyBillingPeriods(reservationId, { ignoredPaymentIds = [] } = {}) {
+  const targetId = parseInt(reservationId, 10);
+  if (!targetId) return [];
+  ensureMonthlyStayPeriods(targetId);
+  const monthRows = queryAll(`
+    SELECT * FROM monthly_stay_periods
+    WHERE reservation_id = ? AND period_kind = 'month'
+    ORDER BY period_index ASC, id ASC
+  `, [targetId]);
+  const partialRows = queryAll(`
+    SELECT * FROM monthly_stay_periods
+    WHERE reservation_id = ? AND period_kind = 'partial_nights'
+    ORDER BY id ASC
+  `, [targetId]);
+  const ignoredIds = new Set(ignoredPaymentIds.map(Number));
+  const payments = queryAll(`
+    SELECT id, receipt_number, amount, payment_method, payment_date, notes, period_start_date, period_end_date
+    FROM payments WHERE reservation_id = ? ORDER BY id ASC
+  `, [targetId]).filter(payment => !ignoredIds.has(Number(payment.id)));
+  const savedAllocations = queryAll(`
+    SELECT a.payment_id, a.period_id, a.allocated_amount, p.receipt_number, p.amount,
+      p.payment_method, p.payment_date, p.notes
+    FROM monthly_payment_allocations a
+    JOIN payments p ON p.id = a.payment_id
+    WHERE p.reservation_id = ? ORDER BY a.id ASC
+  `, [targetId]).filter(allocation => !ignoredIds.has(Number(allocation.payment_id)));
+
+  const partialByPeriod = new Map();
+  for (const partial of partialRows) {
+    const parentId = Number(partial.parent_period_id);
+    const list = partialByPeriod.get(parentId) || [];
+    list.push(partial);
+    partialByPeriod.set(parentId, list);
+  }
+  const resultsById = new Map(monthRows.map(period => [Number(period.id), {
+    id: Number(period.id),
+    periodIndex: Number(period.period_index),
+    title: '',
+    startDate: period.period_start_date,
+    endDate: period.period_end_date,
+    rate: roundMoney(period.gross_amount),
+    monthsCount: 1,
+    monthGrossCharge: roundMoney(period.gross_amount),
+    partialGrossCharge: 0,
+    grossCharge: roundMoney(period.gross_amount),
+    discount: roundMoney(period.discount_amount),
+    totalCharge: roundMoney(period.net_amount),
+    amount: 0,
+    payments: [],
+    partialItems: (partialByPeriod.get(Number(period.id)) || []).map(item => ({
+      startDate: item.period_start_date,
+      endDate: item.period_end_date,
+      grossAmount: roundMoney(item.gross_amount),
+      discount: roundMoney(item.discount_amount),
+      netAmount: roundMoney(item.net_amount)
+    })),
+    isLegacy: Number(period.is_legacy) === 1
+  }]));
+  for (const [periodId, items] of partialByPeriod) {
+    const result = resultsById.get(periodId);
+    if (!result) continue;
+    for (const item of items) {
+      if (String(item.period_end_date) > String(result.endDate)) result.endDate = item.period_end_date;
+      result.partialGrossCharge = roundMoney(result.partialGrossCharge + Number(item.gross_amount || 0));
+      result.grossCharge = roundMoney(result.grossCharge + Number(item.gross_amount || 0));
+      result.discount = roundMoney(result.discount + Number(item.discount_amount || 0));
+      result.totalCharge = roundMoney(result.totalCharge + Number(item.net_amount || 0));
+    }
+  }
+
+  const addAllocation = (payment, periodId, amount) => {
+    const result = resultsById.get(Number(periodId));
+    if (!result || !payment || Math.abs(amount) <= 0.005) return;
+    result.amount = roundMoney(result.amount + amount);
+    result.payments.push({
+      receiptNumber: payment.receipt_number,
+      amount: roundMoney(amount),
+      paymentMethod: payment.payment_method || '',
+      paymentDate: payment.payment_date,
+      notes: payment.notes || ''
+    });
+  };
+
+  const allocationsByPayment = new Map();
+  for (const allocation of savedAllocations) {
+    const paymentId = Number(allocation.payment_id);
+    const list = allocationsByPayment.get(paymentId) || [];
+    list.push(allocation);
+    allocationsByPayment.set(paymentId, list);
+  }
+
+  // Historical receipts without an explicit allocation are only interpreted for
+  // display. Exact date ranges are preferred; otherwise apply FIFO to oldest debt.
+  for (const payment of payments) {
+    const savedForPayment = allocationsByPayment.get(Number(payment.id)) || [];
+    if (savedForPayment.length) {
+      savedForPayment.forEach(allocation => addAllocation(payment, allocation.period_id, Number(allocation.allocated_amount || 0)));
+      continue;
+    }
+    if (Math.abs(Number(payment.amount) || 0) <= 0.005) continue;
+    if (Number(payment.amount) < 0) {
+      // Historical refunds have no explicit period allocation. Reduce the most
+      // recently paid period first, without rewriting the original payment row.
+      let refundRemaining = Math.abs(roundMoney(payment.amount));
+      for (const period of [...monthRows].reverse()) {
+        if (refundRemaining <= 0.005) break;
+        const periodId = Number(period.id);
+        const alreadyPaid = Math.max(0, Number(resultsById.get(periodId)?.amount || 0));
+        const refundShare = Math.min(refundRemaining, alreadyPaid);
+        if (refundShare > 0.005) {
+          addAllocation(payment, periodId, -refundShare);
+          refundRemaining = roundMoney(refundRemaining - refundShare);
+        }
+      }
+      continue;
+    }
+    let candidates = monthRows;
+    const paymentStart = String(payment.period_start_date || '').slice(0, 10);
+    const paymentEnd = String(payment.period_end_date || '').slice(0, 10);
+    if (paymentStart && paymentEnd) {
+      const overlapping = monthRows.filter(period => period.period_start_date < paymentEnd && period.period_end_date > paymentStart);
+      if (overlapping.length) candidates = overlapping;
+    }
+    let remaining = roundMoney(payment.amount);
+    for (const period of candidates) {
+      if (remaining <= 0.005) break;
+      const periodId = Number(period.id);
+      const due = Number(resultsById.get(periodId)?.totalCharge || 0);
+      const alreadyPaid = Number(resultsById.get(periodId)?.amount || 0);
+      const available = Math.max(0, roundMoney(due - alreadyPaid));
+      const allocation = Math.min(remaining, available);
+      if (allocation > 0.005) {
+        addAllocation(payment, periodId, allocation);
+        remaining = roundMoney(remaining - allocation);
+      }
+    }
+    if (remaining > 0.005 && !paymentStart) {
+      // Preserve any legacy overpayment as a credit on the last period for display.
+      const last = monthRows[monthRows.length - 1];
+      if (last) addAllocation(payment, Number(last.id), remaining);
+    }
+  }
+
+  const names = ['الشهر الأول', 'الشهر الثاني', 'الشهر الثالث', 'الشهر الرابع', 'الشهر الخامس', 'الشهر السادس', 'الشهر السابع', 'الشهر الثامن', 'الشهر التاسع', 'الشهر العاشر', 'الشهر الحادي عشر', 'الشهر الثاني عشر'];
+  return Array.from(resultsById.values()).map((period, index) => {
+    period.title = names[index] || `الشهر ${index + 1}`;
+    period.durationText = 'شهر';
+    period.remaining = Math.max(0, roundMoney(period.totalCharge - period.amount));
+    period.receiptNumber = period.payments.length ? period.payments[period.payments.length - 1].receiptNumber : null;
+    period.paymentDate = period.payments.length ? period.payments[period.payments.length - 1].paymentDate : null;
+    period.paymentMethod = period.payments.length === 1
+      ? period.payments[0].paymentMethod
+      : (period.payments.length > 1 ? 'دفعات متعددة' : '');
+    return period;
+  });
+}
+
+function syncMonthlyStayPeriodAmounts(reservationId, totalPrice, discountAmount) {
+  ensureMonthlyStayPeriods(reservationId);
+  const rows = queryAll(`
+    SELECT id, period_kind, gross_amount
+    FROM monthly_stay_periods
+    WHERE reservation_id = ?
+    ORDER BY period_index ASC, id ASC
+  `, [reservationId]);
+  if (!rows.length) return;
+
+  const grossTotal = Math.max(0, roundMoney(Number(totalPrice || 0) + Number(discountAmount || 0)));
+  const discountTotal = Math.max(0, roundMoney(discountAmount || 0));
+  const grossWeights = rows.map(row => Math.max(0, Number(row.gross_amount) || 0));
+  const grossShares = splitAmountAcrossPeriods(grossTotal, rows, grossWeights);
+  const monthRows = rows.map((row, index) => ({ ...row, index, grossShare: grossShares[index] }))
+    .filter(row => row.period_kind === 'month');
+  const partialRows = rows.map((row, index) => ({ ...row, index, grossShare: grossShares[index] }))
+    .filter(row => row.period_kind === 'partial_nights');
+  const monthGrossTotal = roundMoney(monthRows.reduce((sum, row) => sum + row.grossShare, 0));
+  const monthDiscountTotal = Math.min(discountTotal, monthGrossTotal);
+  const monthDiscountShares = splitAmountAcrossPeriods(monthDiscountTotal, monthRows, monthRows.map(row => row.grossShare));
+  const partialDiscountTotal = roundMoney(discountTotal - monthDiscountTotal);
+  const partialDiscountShares = splitAmountAcrossPeriods(partialDiscountTotal, partialRows, partialRows.map(row => row.grossShare));
+  const discountsByIndex = new Map();
+  monthRows.forEach((row, index) => discountsByIndex.set(row.index, monthDiscountShares[index] || 0));
+  partialRows.forEach((row, index) => discountsByIndex.set(row.index, partialDiscountShares[index] || 0));
+
+  const updateStmt = db.prepare(`
+    UPDATE monthly_stay_periods
+    SET gross_amount = ?, discount_amount = ?, net_amount = ?
+    WHERE id = ?
+  `);
+  rows.forEach((row, index) => {
+    const gross = grossShares[index] || 0;
+    const discount = discountsByIndex.get(index) || 0;
+    updateStmt.run([gross, discount, Math.max(0, roundMoney(gross - discount)), row.id]);
+  });
+  updateStmt.free();
+}
 
 /**
  * Is this a MONTHLY booking being checked out before its stored departure date?
@@ -1054,8 +1522,8 @@ function computeStaySegments(res, targetCheckOutDate = null) {
 /**
  * Single source of truth for the monthly contract value.
  *
- *   contractValue = max(0, savedMonthlyRate + extensionCharges - storedDiscount)
- * or, for legacy monthly rows, 30 x storedRate - discount.
+ * For monthly reservations, the charge-period ledger is authoritative for the
+ * gross subtotal and its discounts are subtracted once from that subtotal.
  *
  * bookedNights come from the STORED check_in_date / check_out_date pair (so extensions
  * are included), never from total_price or any renderer-supplied value. The stored
@@ -1084,15 +1552,28 @@ function computeContractValue(res) {
   const isMonthly = res.booking_type === 'حجز شهري';
   const extensionAmount = isMonthly ? roundMoney(res.monthly_extension_amount || 0) : 0;
   const initialMonths = Math.max(1, parseInt(res.monthly_months_count, 10) || 1);
-  const singleMonthlyRate = Number(res.monthly_rate_snapshot) > 0 ? Number(res.monthly_rate_snapshot) : MONTHLY_PACKAGE_NIGHTS * storedRate;
+  const monthlyRateSnapshot = Number(res.monthly_rate_snapshot) > 0
+    ? roundMoney(res.monthly_rate_snapshot)
+    : roundMoney(MONTHLY_PACKAGE_NIGHTS * storedRate);
   // New monthly records use a flat price snapshot. Old records keep their
   // original 30 x nightly-rate calculation, including after later room edits.
-  const base = isMonthly
-    ? roundMoney((singleMonthlyRate * initialMonths) + extensionAmount)
+  let base = isMonthly
+    ? (res.total_price !== undefined && res.total_price !== null
+      ? roundMoney(Number(res.total_price) + Number(res.discount_amount || 0))
+      : roundMoney(monthlyRateSnapshot * initialMonths))
     : (res && res.room_id != null
         ? computeStaySegments(res, res.check_out_date).totalBaseCharge
         : roundMoney(bookedNights * storedRate));
   const fullDiscount = Math.max(0, roundMoney(res.discount_amount || 0));
+  if (isMonthly && res.id != null) {
+    ensureMonthlyStayPeriods(res.id);
+    const chargeTotals = queryOne(`
+      SELECT COALESCE(SUM(gross_amount), 0) AS gross_amount
+      FROM monthly_stay_periods WHERE reservation_id = ?
+    `, [res.id]);
+    const periodGross = roundMoney(chargeTotals?.gross_amount || 0);
+    if (periodGross > 0) base = periodGross;
+  }
   return {
     bookedNights,
     storedRate,
@@ -1724,6 +2205,10 @@ function checkoutReservation(reservationId, {
     ]);
     stmt1.free();
 
+    if (res.booking_type === 'حجز شهري') {
+      syncMonthlyStayPeriodAmounts(targetId, accommodationNetTotal, effectiveDiscount);
+    }
+
     // Room → cleaning
     const stmt2 = db.prepare("UPDATE rooms SET status = 'تنظيف' WHERE id = ?");
     stmt2.run([res.room_id]);
@@ -1845,39 +2330,38 @@ function extendReservation({
     throw new Error('سعر الليلة يجب أن يكون أكبر من الصفر. اترك الحقل فارغاً لاستخدام سعر الغرفة.');
   }
 
-  const normDiscountAmount = (discountAmount !== undefined && discountAmount !== null && discountAmount !== '' && !isNaN(Number(discountAmount)))
+  const normDiscountInput = (discountAmount !== undefined && discountAmount !== null && discountAmount !== '' && !isNaN(Number(discountAmount)))
     ? Math.max(0, roundMoney(discountAmount))
     : 0;
 
-  let extMonths = 0;
-  if (isMonthly && monthlyRate > 0) {
-    for (let m = 1; m <= 12; m++) {
-      if (cleanNewCheckOut === getCalendarMonthCheckOut(oldCheckOut, m)) {
-        extMonths = m;
-        break;
-      }
-    }
+  const extensionSpan = isMonthly ? getFullMonthsAndRemainder(oldCheckOut, cleanNewCheckOut) : { months: 0, partialNights: extraNights };
+  const extMonths = extensionSpan.months;
+  if (isMonthly && normDiscountInput > monthlyRate + 0.005) {
+    throw new Error('الخصم الشهري لا يمكن أن يتجاوز سعر الشهر الواحد.');
   }
+  if (isMonthly && normDiscountInput > 0 && extMonths === 0) {
+    throw new Error('الخصم الشهري يطبق على الأشهر الكاملة فقط.');
+  }
+  const normDiscountAmount = isMonthly
+    ? roundMoney(normDiscountInput * extMonths)
+    : normDiscountInput;
 
   let baseCost;
   if (isMonthly && monthlyRate > 0) {
-    if (extMonths > 0) {
-      baseCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)))
-        ? roundMoney(additionalCost)
-        : roundMoney(extMonths * monthlyRate);
-    } else if (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost))) {
-      baseCost = roundMoney(additionalCost);
-    } else {
-      baseCost = roundMoney(extraNights * (res.price_per_night || roundMoney(monthlyRate / 30)));
-    }
+    const partialNightRate = Number(res.price_per_night) > 0 ? Number(res.price_per_night) : roundMoney(monthlyRate / 30);
+    baseCost = roundMoney((extMonths * monthlyRate) + (extensionSpan.partialNights * partialNightRate));
   } else {
     baseCost = roundMoney(extraNights * normCustomNightlyPrice);
   }
 
   const calculatedCost = Math.max(0, roundMoney(baseCost - normDiscountAmount));
-  const calcAdditionalCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)) && (!isMonthly || extMonths > 0))
+  const passedAdditionalCost = (additionalCost !== undefined && additionalCost !== null && !isNaN(Number(additionalCost)))
     ? roundMoney(additionalCost)
-    : calculatedCost;
+    : null;
+  if (isMonthly && passedAdditionalCost !== null && Math.abs(passedAdditionalCost - calculatedCost) > 0.005) {
+    throw new Error(`تكلفة التمديد المرسلة (${passedAdditionalCost}) لا تطابق التكلفة المحسوبة (${calculatedCost}).`);
+  }
+  const calcAdditionalCost = (!isMonthly && passedAdditionalCost !== null) ? passedAdditionalCost : calculatedCost;
 
   // Check room availability for the extension period (oldCheckOut to cleanNewCheckOut)
   const conflict = queryOne(`
@@ -1913,9 +2397,31 @@ function extendReservation({
   if (payAmount < 0) {
     throw new Error('مبلغ السداد لا يمكن أن يكون سالباً.');
   }
+  if (isMonthly && payAmount - calcAdditionalCost > 0.005) {
+    throw new Error('مبلغ السداد لا يمكن أن يتجاوز تكلفة التمديد الحالية.');
+  }
+
+  if (isMonthly) ensureMonthlyStayPeriods(targetId, res);
 
   db.run("BEGIN TRANSACTION;");
   try {
+    const extensionPeriodIds = isMonthly
+      ? createMonthlyExtensionPeriods({
+        reservationId: targetId,
+        oldCheckOutDate: oldCheckOut,
+        newCheckOutDate: cleanNewCheckOut,
+        monthlyRate,
+        nightlyRate: Number(res.price_per_night) > 0 ? Number(res.price_per_night) : roundMoney(monthlyRate / 30),
+        discountPerMonth: normDiscountInput,
+        fullMonths: extMonths,
+        partialNights: extensionSpan.partialNights
+      })
+      : [];
+    const lastMonthlyPeriodId = isMonthly && extensionPeriodIds.length === 0
+      ? Number(queryOne(`SELECT id FROM monthly_stay_periods WHERE reservation_id = ? AND period_kind = 'month' ORDER BY period_index DESC, id DESC LIMIT 1`, [targetId])?.id || 0)
+      : 0;
+    const paymentPeriodIds = extensionPeriodIds.length ? extensionPeriodIds : (lastMonthlyPeriodId ? [lastMonthlyPeriodId] : []);
+
     let receiptNumber = null;
     let newPaid = currentPaid;
 
@@ -1940,6 +2446,10 @@ function extendReservation({
         cleanNewCheckOut
       ]);
       payStmt.free();
+      if (isMonthly) {
+        const paymentId = Number(queryOne('SELECT last_insert_rowid() AS id')?.id || 0);
+        insertMonthlyPaymentAllocations(paymentId, payAmount, paymentPeriodIds, targetId);
+      }
     }
 
     let newPaymentStatus = res.payment_status;
@@ -1990,6 +2500,7 @@ function extendReservation({
       extraNights,
       nightlyRate: normCustomNightlyPrice,
       discountAmount: normDiscountAmount,
+      monthlyDiscountPerMonth: isMonthly ? normDiscountInput : null,
       additionalCost: calcAdditionalCost,
       paidAmount: payAmount,
       receiptNumber,
@@ -2246,7 +2757,7 @@ function cancelReservation(reservationId, actualDepartureDate = null, manualOver
  * - Inserts receipt in 'payments' ledger table.
  * - Updates reservations table atomically.
  */
-function addPaymentToReservation({ reservationId, amount, paymentMethod = 'نقداً', userId = null, notes = '' }) {
+function addPaymentToReservation({ reservationId, amount, paymentMethod = 'نقداً', userId = null, notes = '', monthlyPeriodId = null }) {
   const targetId = parseInt(reservationId, 10);
   if (!targetId || isNaN(targetId)) {
     throw new Error('معرف الحجز غير صالح.');
@@ -2271,6 +2782,16 @@ function addPaymentToReservation({ reservationId, amount, paymentMethod = 'نق�
 
   if (res.status === 'ملغي') {
     throw new Error('لا يمكن تسجيل دفعات لحجز ملغي.');
+  }
+
+  let selectedMonthlyPeriod = null;
+  if (res.booking_type === 'حجز شهري') {
+    if (!monthlyPeriodId) throw new Error('يرجى اختيار شهر الإقامة الذي تخصه الدفعة.');
+    selectedMonthlyPeriod = getMonthlyBillingPeriods(targetId).find(period => period.id === parseInt(monthlyPeriodId, 10));
+    if (!selectedMonthlyPeriod) throw new Error('فترة الإقامة المختارة غير موجودة لهذا الحجز.');
+    if (payAmount - selectedMonthlyPeriod.remaining > 0.005) {
+      throw new Error(`مبلغ السداد يتجاوز المتبقي على ${selectedMonthlyPeriod.title} (${selectedMonthlyPeriod.remaining.toLocaleString()} ريال).`);
+    }
   }
 
   const hasLedger = res.ledger_paid_amount !== null && res.ledger_paid_amount !== undefined;
@@ -2344,8 +2865,10 @@ function addPaymentToReservation({ reservationId, amount, paymentMethod = 'نق�
 
     // 1. Insert entry into payments ledger table
     const payStmt = db.prepare(`
-      INSERT INTO payments (receipt_number, reservation_id, amount, payment_method, payment_type, payment_date, user_id, notes)
-      VALUES (?, ?, ?, ?, 'balance_payment', datetime('now', 'localtime'), ?, ?)
+      INSERT INTO payments (
+        receipt_number, reservation_id, amount, payment_method, payment_type, payment_date,
+        user_id, notes, period_start_date, period_end_date
+      ) VALUES (?, ?, ?, ?, 'balance_payment', datetime('now', 'localtime'), ?, ?, ?, ?)
     `);
     payStmt.run([
       receiptNumber,
@@ -2353,9 +2876,15 @@ function addPaymentToReservation({ reservationId, amount, paymentMethod = 'نق�
       payAmount,
       paymentMethod || 'نقداً',
       userId ? parseInt(userId, 10) : null,
-      notes || 'سداد دفعة حجز'
+      notes || 'سداد دفعة حجز',
+      selectedMonthlyPeriod?.startDate || null,
+      selectedMonthlyPeriod?.endDate || null
     ]);
     payStmt.free();
+    if (selectedMonthlyPeriod) {
+      const paymentId = Number(queryOne('SELECT last_insert_rowid() AS id')?.id || 0);
+      insertExactMonthlyPaymentAllocation(paymentId, selectedMonthlyPeriod.id, payAmount);
+    }
 
     // 2. Update reservations table
     // Preserve initial reservation payment method if one was already set or paid for
@@ -2385,7 +2914,8 @@ function addPaymentToReservation({ reservationId, amount, paymentMethod = 'نق�
       totalPrice,
       remainingBalance: newRemaining,
       paymentStatus: newPaymentStatus,
-      isFullyPaid
+      isFullyPaid,
+      monthlyPeriodId: selectedMonthlyPeriod?.id || null
     };
   } catch (err) {
     try { db.run("ROLLBACK;"); } catch (rbErr) {}
@@ -2608,9 +3138,9 @@ function updateReservationReceipt({
     ? roundMoney(customNightlyPrice)
     : null;
   const existingDiscount = roundMoney(res.discount_amount || 0);
-  const monthlySnapshotToWrite = res.booking_type === 'حجز شهري'
-    ? Math.max(0, roundMoney(total + (normDiscountAmount ?? existingDiscount) - Number(res.monthly_extension_amount || 0)))
-    : null;
+  // The snapshot is the contractual monthly rate; editing the aggregate receipt
+  // must not rewrite that rate or subtract extension charges from it again.
+  const monthlySnapshotToWrite = null;
 
   if (normDiscountAmount > 0 && !normDiscountReason) {
     throw new Error('سبب الخصم مطلوب ولا يمكن إتمام العملية بدونه.');
@@ -2680,6 +3210,7 @@ function updateReservationReceipt({
 
   db.run("BEGIN TRANSACTION;");
   try {
+    if (res.booking_type === 'حجز شهري') ensureMonthlyStayPeriods(targetId);
     // 1. Update reservations table
     const updateResStmt = db.prepare(`
       UPDATE reservations 
@@ -2709,6 +3240,10 @@ function updateReservationReceipt({
       targetId
     ]);
     updateResStmt.free();
+
+    if (res.booking_type === 'حجز شهري') {
+      syncMonthlyStayPeriodAmounts(targetId, total, normDiscountAmount ?? existingDiscount);
+    }
 
     // 2. Insert delta adjustment if the paid amount was manually changed
     const hasLedger = res.ledger_paid_amount !== null && res.ledger_paid_amount !== undefined;
@@ -3345,6 +3880,10 @@ function executeRoomTransfer({
     ]);
     stmtRes.free();
 
+    if (stay.isMonthly) {
+      syncMonthlyStayPeriodAmounts(stay.res.id, evalResult.newTotalPrice, Number(stay.res.discount_amount || 0));
+    }
+
     // Insert into reservation_transfers (with from_rate, transfer_mode, from_monthly_price, to_monthly_price)
     const stmtTrans = db.prepare(`
       INSERT INTO reservation_transfers (
@@ -3563,6 +4102,7 @@ module.exports = {
   cancelReservation,
   addPaymentToReservation,
   getReservationPayments,
+  getMonthlyBillingPeriods,
   getReservationDepositMovements,
   reconcileLegacyDeposit,
   getPaymentReceipt,

@@ -209,6 +209,40 @@ async function init(dbPath) {
       CREATE INDEX IF NOT EXISTS idx_payments_reservation_id ON payments(reservation_id);
       CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);
 
+      -- Billing periods are independent from receipts: one month can have many
+      -- partial payments, and an extension may exist before any payment is made.
+      CREATE TABLE IF NOT EXISTS monthly_stay_periods (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reservation_id INTEGER NOT NULL,
+        period_index INTEGER NOT NULL,
+        period_kind TEXT NOT NULL CHECK (period_kind IN ('month', 'partial_nights')),
+        period_start_date TEXT NOT NULL,
+        period_end_date TEXT NOT NULL,
+        gross_amount REAL NOT NULL DEFAULT 0,
+        discount_amount REAL NOT NULL DEFAULT 0,
+        net_amount REAL NOT NULL DEFAULT 0,
+        parent_period_id INTEGER,
+        is_legacy INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(reservation_id) REFERENCES reservations(id) ON DELETE CASCADE,
+        FOREIGN KEY(parent_period_id) REFERENCES monthly_stay_periods(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_monthly_stay_periods_reservation
+        ON monthly_stay_periods(reservation_id, period_index, id);
+
+      CREATE TABLE IF NOT EXISTS monthly_payment_allocations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payment_id INTEGER NOT NULL,
+        period_id INTEGER NOT NULL,
+        allocated_amount REAL NOT NULL CHECK (allocated_amount > 0),
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(payment_id) REFERENCES payments(id) ON DELETE CASCADE,
+        FOREIGN KEY(period_id) REFERENCES monthly_stay_periods(id) ON DELETE CASCADE,
+        UNIQUE(payment_id, period_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_monthly_payment_allocations_period
+        ON monthly_payment_allocations(period_id, payment_id);
+
       -- سجل مستقل لحركات التأمين؛ لا يمثل رصيد التأمين إيراد إقامة أو تحصيلاً يومياً.
       CREATE TABLE IF NOT EXISTS deposit_movements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
