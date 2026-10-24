@@ -1082,102 +1082,34 @@
       }
 
       const monthlyReceiptCyclesByNumber = new Map();
-      monthlyCycles.forEach(cycle => {
-        let periodAllocatedCumulative = 0;
-        cycle.payments.forEach((payment, paymentIdx) => {
-          const receiptNumber = String(payment.receiptNumber || '').trim();
-          const allocatedAmount = Number(payment.amount || 0);
-          if (!receiptNumber || allocatedAmount <= 0) return;
+      monthlyCycles.forEach((cycle, cycleIdx) => {
+        const cycleKey = String(cycle.periodId ?? cycleIdx);
+        const cyclePayments = Array.isArray(cycle.payments) ? cycle.payments : [];
+        const primaryReceipt = cyclePayments.length ? cyclePayments[0].receiptNumber : (cycle.receiptNumber || inv.receipt_number || invoiceNum);
+        const totalPaidInCycle = roundMoney(cyclePayments.reduce((sum, p) => sum + Number(p.amount || 0), 0));
+        const effectiveAmount = totalPaidInCycle > 0 ? totalPaidInCycle : Number(cycle.amount || 0);
 
-          const previousAllocatedInPeriod = periodAllocatedCumulative;
-          periodAllocatedCumulative = roundMoney(periodAllocatedCumulative + allocatedAmount);
-
-          let receiptCycle = monthlyReceiptCyclesByNumber.get(receiptNumber);
-          if (!receiptCycle) {
-            receiptCycle = {
-              receiptNumber,
-              startDate: cycle.startDate,
-              endDate: cycle.endDate,
-              amount: 0,
-              payments: [],
-              periodIds: new Set(),
-              periods: [],
-              partialItems: [],
-              rate: cycle.rate,
-              monthsCount: 0,
-              monthGrossCharge: 0,
-              grossCharge: 0,
-              discount: 0,
-              totalCharge: 0,
-              previousPaid: 0,
-              paymentDate: payment.paymentDate || cycle.paymentDate,
-              paymentMethod: payment.paymentMethod || cycle.paymentMethod
-            };
-            monthlyReceiptCyclesByNumber.set(receiptNumber, receiptCycle);
-          }
-
-          receiptCycle.amount = roundMoney(receiptCycle.amount + allocatedAmount);
-          receiptCycle.previousPaid = roundMoney(receiptCycle.previousPaid + previousAllocatedInPeriod);
-          receiptCycle.payments.push({
-            receiptNumber,
-            amount: allocatedAmount,
-            periodId: cycle.periodId,
-            periodTitle: cycle.title,
-            paymentIndex: paymentIdx,
-            periodPaymentsCount: cycle.payments.length,
-            paymentDate: payment.paymentDate || cycle.paymentDate,
-            paymentMethod: payment.paymentMethod || cycle.paymentMethod
-          });
-          if (!receiptCycle.periodIds.has(cycle.periodId)) {
-            receiptCycle.periodIds.add(cycle.periodId);
-            receiptCycle.periods.push(cycle);
-            receiptCycle.startDate = cycle.startDate < receiptCycle.startDate ? cycle.startDate : receiptCycle.startDate;
-            receiptCycle.endDate = cycle.endDate > receiptCycle.endDate ? cycle.endDate : receiptCycle.endDate;
-            receiptCycle.monthsCount += cycle.monthsCount;
-            receiptCycle.monthGrossCharge = roundMoney(receiptCycle.monthGrossCharge + cycle.monthGrossCharge);
-            receiptCycle.grossCharge = roundMoney(receiptCycle.grossCharge + cycle.grossCharge);
-            receiptCycle.discount = roundMoney(receiptCycle.discount + cycle.discount);
-            receiptCycle.totalCharge = roundMoney(receiptCycle.totalCharge + cycle.totalCharge);
-            receiptCycle.partialItems.push(...cycle.partialItems);
-          }
+        monthlyReceiptCyclesByNumber.set(cycleKey, {
+          ...cycle,
+          receiptNumber: primaryReceipt,
+          amount: effectiveAmount,
+          tabLabel: `سند ${cycle.title}`,
+          installmentText: ''
         });
       });
-      const monthNames = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
-      const monthlyReceiptCycles = Array.from(monthlyReceiptCyclesByNumber.values()).map((cycle, index) => {
-        const monthsCount = Number(cycle.monthsCount) || 1;
-        const durationText = cycle.monthsCount === 1
-          ? 'شهر'
-          : (monthsCount === 2 ? 'شهران' : (monthsCount <= 10 ? `${monthsCount} أشهر` : `${monthsCount} شهراً`));
-        cycle.durationText = durationText;
-
-        if (cycle.periods.length === 1) {
-          const period = cycle.periods[0];
-          if (period.payments.length > 1) {
-            const pInfo = cycle.payments.find(p => p.periodId === period.periodId);
-            const defaIdx = (pInfo ? pInfo.paymentIndex : 0) + 1;
-            cycle.tabLabel = `سند ${period.title} - دفعة ${defaIdx}`;
-            cycle.installmentText = `دفعة ${defaIdx}`;
-          } else {
-            cycle.tabLabel = `سند ${period.title} (${durationText})`;
-            cycle.installmentText = '';
-          }
-        } else if (cycle.periods.length > 1) {
-          const periodTitles = cycle.periods.map(p => p.title).join(' و ');
-          cycle.tabLabel = `سند ${periodTitles} (${durationText})`;
-          cycle.installmentText = '';
-        } else {
-          const monthName = monthNames[index] || `${index + 1}`;
-          cycle.tabLabel = `سند الشهر ${monthName} (${durationText})`;
-          cycle.installmentText = '';
-        }
-
-        cycle.periodIds = undefined;
-        return cycle;
-      });
+      const monthlyReceiptCycles = Array.from(monthlyReceiptCyclesByNumber.values());
       let selectedCycleIndex = -1;
       if (options && options.receiptNumber) {
-        const initialIdx = monthlyReceiptCycles.findIndex(c => c.receiptNumber === options.receiptNumber);
-        if (initialIdx !== -1) selectedCycleIndex = initialIdx;
+        const targetNum = String(options.receiptNumber).trim();
+        const foundIdx = monthlyReceiptCycles.findIndex(c => (
+          String(c.receiptNumber).trim() === targetNum || (Array.isArray(c.payments) && c.payments.some(p => String(p.receiptNumber).trim() === targetNum))
+        ));
+        if (foundIdx !== -1) {
+          selectedCycleIndex = foundIdx;
+          if (monthlyReceiptCycles[foundIdx].payments.some(p => String(p.receiptNumber).trim() === targetNum)) {
+            monthlyReceiptCycles[foundIdx].receiptNumber = targetNum;
+          }
+        }
       }
 
       const invoiceTabsBar = document.getElementById('invoice-receipt-tabs-bar');
@@ -1238,16 +1170,14 @@
               }
             }
             const cyclePaid = currentCycle.amount;
-            const cyclePrevPaid = currentCycle.previousPaid || 0;
-            const cycleCumulativePaid = roundMoney(cyclePrevPaid + cyclePaid);
             const cycleRate = currentCycle.rate;
             const cycleGrossCharge = currentCycle.grossCharge || roundMoney(cycleRate * (currentCycle.monthsCount || 1));
             const cycleDiscount = currentCycle.discount || 0;
             const cycleTotalCharge = currentCycle.totalCharge !== undefined
               ? currentCycle.totalCharge
               : Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
-            const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cycleCumulativePaid));
-            const cycleStatusBadge = cycleRemaining <= 0.005 ? 'مدفوع بالكامل' : (cycleCumulativePaid > 0 ? 'مدفوع جزئياً' : 'غير مدفوع');
+            const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cyclePaid));
+            const cycleStatusBadge = cycleRemaining <= 0.005 ? 'مدفوع بالكامل' : (cyclePaid > 0 ? 'مدفوع جزئياً' : 'غير مدفوع');
             displayPaymentBadgeHtml = window.DashboardApp.Helpers.getPaymentStatusBadge(cycleStatusBadge);
             displayCheckIn = formatReceiptDate(currentCycle.startDate);
             displayCheckOut = formatReceiptDate(currentCycle.endDate);
@@ -1261,15 +1191,13 @@
           if (isSingleCycleView && currentCycle) {
             const cycleRate = currentCycle.rate;
             const cyclePaid = currentCycle.amount;
-            const cyclePrevPaid = currentCycle.previousPaid || 0;
-            const cycleCumulativePaid = roundMoney(cyclePrevPaid + cyclePaid);
             const cycleGrossCharge = currentCycle.grossCharge || roundMoney(cycleRate * (currentCycle.monthsCount || 1));
             const cycleMonthGrossCharge = currentCycle.monthGrossCharge ?? cycleGrossCharge;
             const cycleDiscount = currentCycle.discount || 0;
             const cycleTotalCharge = currentCycle.totalCharge !== undefined
               ? currentCycle.totalCharge
               : Math.max(0, roundMoney(cycleGrossCharge - cycleDiscount));
-            const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cycleCumulativePaid));
+            const cycleRemaining = Math.max(0, roundMoney(cycleTotalCharge - cyclePaid));
 
             itemsTableRowsHtml = `
               <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -1277,7 +1205,7 @@
                   <div style="font-weight: 700; color: #1e293b;">إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))}</div>
                   <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">
                     نوع الوحدة: ${escapeHtml(receiptDigits(inv.room_type || 'عادية'))} | الفترة: <bdi dir="ltr">${displayCheckIn}</bdi> إلى <bdi dir="ltr">${displayCheckOut}</bdi>
-                    ${currentCycle.receiptNumber ? `<div style="margin-top: 3px;">سند القبض: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(currentCycle.receiptNumber))}</span> — ${formatReceiptMoney(cyclePaid)} ر.س${currentCycle.installmentText ? ` (${currentCycle.installmentText})` : ''}</div>` : '<div style="margin-top: 3px; color: #b91c1c;">لا يوجد سند قبض لهذه الفترة</div>'}
+                    ${currentCycle.receiptNumber ? `<div style="margin-top: 3px;">سند القبض: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(currentCycle.receiptNumber))}</span> — ${formatReceiptMoney(cyclePaid)} ر.س</div>` : '<div style="margin-top: 3px; color: #b91c1c;">لا يوجد سند قبض لهذه الفترة</div>'}
                   </div>
                 </td>
                 <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cycleRate)} ر.س</td>
@@ -1325,25 +1253,10 @@
                   <span>الإجمالي الصافي:</span>
                   <span dir="ltr">${formatReceiptMoney(cycleTotalCharge)} ر.س</span>
                 </div>
-                ${cyclePrevPaid > 0 ? `
-                  <div class="receipt-total-line">
-                    <span>المسدد سابقاً:</span>
-                    <span dir="ltr">${formatReceiptMoney(cyclePrevPaid)} ر.س</span>
-                  </div>
-                  <div class="receipt-total-line receipt-total-paid">
-                    <span>المدفوع في هذا السند:</span>
-                    <span dir="ltr">${formatReceiptMoney(cyclePaid)} ر.س</span>
-                  </div>
-                  <div class="receipt-total-line" style="font-weight: 700; color: #1e293b;">
-                    <span>إجمالي المسدد حتى هذا السند:</span>
-                    <span dir="ltr">${formatReceiptMoney(cycleCumulativePaid)} ر.س</span>
-                  </div>
-                ` : `
-                  <div class="receipt-total-line receipt-total-paid">
-                    <span>المبلغ المدفوع:</span>
-                    <span dir="ltr">${formatReceiptMoney(cyclePaid)} ر.س</span>
-                  </div>
-                `}
+                <div class="receipt-total-line receipt-total-paid">
+                  <span>المبلغ المدفوع:</span>
+                  <span dir="ltr">${formatReceiptMoney(cyclePaid)} ر.س</span>
+                </div>
                 <div class="receipt-total-line receipt-total-remaining" style="color: ${cycleRemaining > 0 ? '#dc2626' : '#05963d'};">
                   <span>المبلغ المتبقي:</span>
                   <span dir="ltr">${formatReceiptMoney(cycleRemaining)} ر.س</span>
@@ -1353,26 +1266,11 @@
           } else {
             // Cumulative or Standard View
             if (isMonthly && monthlyCycles.length > 0) {
-              const displayedCycles = monthlyCycles.map(cycle => {
-                const paymentsList = Array.isArray(cycle.payments) ? cycle.payments.filter(p => (
-                  String(p.receiptNumber || '').trim() && Number(p.amount) > 0
-                )) : [];
-                let receiptNumberText = '';
-                if (paymentsList.length === 1) {
-                  receiptNumberText = `سند رقم: <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(paymentsList[0].receiptNumber))}</span> (${formatReceiptMoney(paymentsList[0].amount)} ر.س)`;
-                } else if (paymentsList.length > 1) {
-                  const items = paymentsList.map((p, idx) => `دفعة ${idx + 1} [سند <span style="font-family: monospace; font-weight: 700;">${escapeHtml(receiptDigits(p.receiptNumber))}</span>]: ${formatReceiptMoney(p.amount)} ر.س`).join(' ، ');
-                  receiptNumberText = `سندات القبض المسددة: ${items}`;
-                } else {
-                  receiptNumberText = '<span style="color: #b91c1c;">لا توجد دفعة مسجلة لهذه الفترة</span>';
-                }
-                return {
-                  ...cycle,
-                  tabLabel: cycle.title,
-                  receiptNumberText,
-                  monthGrossCharge: Number(cycle.monthGrossCharge ?? cycle.grossCharge ?? 0)
-                };
-              });
+              const displayedCycles = monthlyCycles.map(cycle => ({
+                ...cycle,
+                tabLabel: cycle.title,
+                monthGrossCharge: Number(cycle.monthGrossCharge ?? cycle.grossCharge ?? 0)
+              }));
 
               itemsTableRowsHtml = displayedCycles.map(cycle => `
                 <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -1380,7 +1278,6 @@
                     <div style="font-weight: 700; color: #1e293b;">إقامة سكنية - وحدة ${escapeHtml(receiptDigits(inv.room_number))} (${escapeHtml(cycle.tabLabel)})</div>
                     <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">
                       الفترة من <bdi dir="ltr">${formatReceiptDate(cycle.startDate)}</bdi> إلى <bdi dir="ltr">${formatReceiptDate(cycle.endDate)}</bdi>
-                      ${cycle.receiptNumberText ? ` | ${cycle.receiptNumberText}` : ''}
                     </div>
                   </td>
                   <td style="padding: 14px; text-align: center; color: #475569;">${formatReceiptMoney(cycle.rate)} ر.س</td>
