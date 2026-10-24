@@ -99,7 +99,7 @@ test('international phone numbers and independent monthly branding profile', asy
       const dashboardJs = fs.readFileSync(path.join(__dirname, '../dashboard.js'), 'utf8');
       assert.ok(dashboardJs.includes('activeBrand.monthlyCrNumber'), 'dashboard.js must support activeBrand.monthlyCrNumber');
       assert.ok(dashboardJs.includes('activeBrand.monthlyPhone'), 'dashboard.js must support activeBrand.monthlyPhone');
-      assert.ok(dashboardJs.includes('!isMonthly && activeBrand.logo'), 'hotel logo badge must be omitted for monthly contracts');
+      assert.ok(!dashboardJs.includes('activeBrand.logo ? `<img'), 'hotel logo badge must be omitted from receipt headers');
     });
   });
 });
