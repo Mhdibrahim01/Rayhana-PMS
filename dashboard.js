@@ -1463,7 +1463,7 @@
               <div class="receipt-header" style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 24px; margin-bottom: 28px;">
                 <!-- Company Info (Right) -->
                 <div style="display: flex; gap: 16px; align-items: flex-start;">
-                  ${activeBrand.logo ? `<img src="${activeBrand.logo}" alt="شعار الفندق" style="width: 52px; height: 52px; border-radius: 8px; object-fit: contain; border: 1px solid #e2e8f0; background: #fff; padding: 2px;">` : ''}
+                  ${(!isMonthly && activeBrand.logo) ? `<img src="${activeBrand.logo}" alt="شعار الفندق" style="width: 52px; height: 52px; border-radius: 8px; object-fit: contain; border: 1px solid #e2e8f0; background: #fff; padding: 2px;">` : (isMonthly && activeBrand.monthlyLogo ? `<img src="${activeBrand.monthlyLogo}" alt="شعار المنشأة" style="width: 52px; height: 52px; border-radius: 8px; object-fit: contain; border: 1px solid #e2e8f0; background: #fff; padding: 2px;">` : '')}
                   <div>
                     <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? (activeBrand.companyAr || activeBrand.monthlyCompanyAr || activeBrand.nameAr || 'مؤسسة مكتب شمس المنازل للخدمات العقارية') : (activeBrand.nameAr || 'ريحانة للوحدات السكنية')}</h2>
                     <div style="font-size: 0.85rem; color: #64748b; line-height: 1.6;">
