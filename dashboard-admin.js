@@ -120,6 +120,13 @@
     const inAddr = document.getElementById('brand-edit-address');
     const inPost = document.getElementById('brand-edit-postal');
 
+    const inMonthlyNameEn = document.getElementById('brand-edit-monthly-name-en');
+    const inMonthlyCr = document.getElementById('brand-edit-monthly-cr');
+    const inMonthlyVat = document.getElementById('brand-edit-monthly-vat');
+    const inMonthlyPhone = document.getElementById('brand-edit-monthly-phone');
+    const inMonthlyAddr = document.getElementById('brand-edit-monthly-address');
+    const inMonthlyPost = document.getElementById('brand-edit-monthly-postal');
+
     if (inNameAr) inNameAr.value = brand.nameAr || '';
     if (inNameEn) inNameEn.value = brand.nameEn || '';
     if (inComp) inComp.value = brand.companyAr || '';
@@ -128,6 +135,13 @@
     if (inPhone) inPhone.value = brand.phone || '';
     if (inAddr) inAddr.value = brand.address || '';
     if (inPost) inPost.value = brand.postalCode || '';
+
+    if (inMonthlyNameEn) inMonthlyNameEn.value = brand.monthlyNameEn || '';
+    if (inMonthlyCr) inMonthlyCr.value = brand.monthlyCrNumber !== undefined ? brand.monthlyCrNumber : (brand.crNumber || '');
+    if (inMonthlyVat) inMonthlyVat.value = brand.monthlyVatNumber || '';
+    if (inMonthlyPhone) inMonthlyPhone.value = brand.monthlyPhone !== undefined ? brand.monthlyPhone : (brand.phone || '');
+    if (inMonthlyAddr) inMonthlyAddr.value = brand.monthlyAddress !== undefined ? brand.monthlyAddress : (brand.address || '');
+    if (inMonthlyPost) inMonthlyPost.value = brand.monthlyPostalCode !== undefined ? brand.monthlyPostalCode : (brand.postalCode || '');
   }
 
   async function loadBrandAdminSettings() {
@@ -646,6 +660,12 @@
         phone: document.getElementById('brand-edit-phone')?.value?.trim(),
         address: document.getElementById('brand-edit-address')?.value?.trim(),
         postalCode: document.getElementById('brand-edit-postal')?.value?.trim(),
+        monthlyNameEn: document.getElementById('brand-edit-monthly-name-en')?.value?.trim() || '',
+        monthlyCrNumber: document.getElementById('brand-edit-monthly-cr')?.value?.trim() || '',
+        monthlyVatNumber: document.getElementById('brand-edit-monthly-vat')?.value?.trim() || '',
+        monthlyPhone: document.getElementById('brand-edit-monthly-phone')?.value?.trim() || '',
+        monthlyAddress: document.getElementById('brand-edit-monthly-address')?.value?.trim() || '',
+        monthlyPostalCode: document.getElementById('brand-edit-monthly-postal')?.value?.trim() || '',
         showSeal: Boolean(document.getElementById('brand-toggle-seal')?.checked),
         showSignature: Boolean(document.getElementById('brand-toggle-signature')?.checked)
       };

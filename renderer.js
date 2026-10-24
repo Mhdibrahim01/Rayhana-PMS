@@ -151,8 +151,9 @@
         showToast('يرجى إدخال اسم العميل / النزيل.', 'error');
         return;
       }
-      if (phone && !/^05\d{8}$/.test(phone)) {
-        showToast('رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).', 'error');
+      const cleanPhone = phone ? String(phone).trim().replace(/[\s\-\(\)]/g, '') : '';
+      if (cleanPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(cleanPhone)) {
+        showToast('رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).', 'error');
         return;
       }
       if (id_number && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(id_number)) {

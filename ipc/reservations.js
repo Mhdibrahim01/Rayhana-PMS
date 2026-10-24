@@ -104,12 +104,13 @@ module.exports = function registerReservationsIpc(ipcMain, { db, session, helper
       }
     }
 
-    // 2. Phone Number: Must start with '05' and be exactly 10 digits
-    if (!guestPhone) {
+    // 2. Phone Number: Local or International (7 to 15 digits)
+    const cleanGuestPhone = guestPhone ? String(guestPhone).trim().replace(/[\s\-\(\)]/g, '') : '';
+    if (!cleanGuestPhone) {
       return { valid: false, error: 'رقم الجوال مطلوب لتأكيد الحجز.' };
     }
-    if (!/^05\d{8}$/.test(guestPhone)) {
-      return { valid: false, error: 'رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).' };
+    if (!/^(?:\+|00)?[0-9]{7,15}$/.test(cleanGuestPhone)) {
+      return { valid: false, error: 'رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).' };
     }
 
     // 3. National ID (10 digits) OR Passport (6-9 alphanumeric characters)

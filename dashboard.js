@@ -1048,6 +1048,12 @@
         address: 'الخبر - الثقبة',
         postalCode: '34625',
         phone: '0560631783',
+        monthlyNameEn: 'Shams Al-Manazil Real Estate Services',
+        monthlyCrNumber: '7038955915',
+        monthlyVatNumber: '',
+        monthlyPhone: '0560631783',
+        monthlyAddress: 'الخبر - الثقبة',
+        monthlyPostalCode: '34625',
         seal: 'assets/seal.svg',
         signature: 'assets/signature.svg'
       };
@@ -1459,13 +1465,13 @@
                 <div style="display: flex; gap: 16px; align-items: flex-start;">
                   ${activeBrand.logo ? `<img src="${activeBrand.logo}" alt="شعار الفندق" style="width: 52px; height: 52px; border-radius: 8px; object-fit: contain; border: 1px solid #e2e8f0; background: #fff; padding: 2px;">` : ''}
                   <div>
-                    <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? (activeBrand.companyAr || activeBrand.nameAr || 'مؤسسة مكتب شمس المنازل للخدمات العقارية') : (activeBrand.nameAr || 'ريحانة للوحدات السكنية')}</h2>
+                    <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin: 0 0 8px 0;">${isMonthly ? (activeBrand.companyAr || activeBrand.monthlyCompanyAr || activeBrand.nameAr || 'مؤسسة مكتب شمس المنازل للخدمات العقارية') : (activeBrand.nameAr || 'ريحانة للوحدات السكنية')}</h2>
                     <div style="font-size: 0.85rem; color: #64748b; line-height: 1.6;">
-                      <div>العنوان: ${escapeHtml(activeBrand.address || 'الخبر - الثقبة')} </div>
-                      <div>الرمز البريدي: ${escapeHtml(activeBrand.postalCode || '34625')}</div>
-                      <div>هاتف الاستقبال: ${escapeHtml(activeBrand.phone || '0560631783')}</div>
+                      <div>العنوان: ${escapeHtml(isMonthly ? (activeBrand.monthlyAddress || activeBrand.address || 'الخبر - الثقبة') : (activeBrand.address || 'الخبر - الثقبة'))} </div>
+                      <div>الرمز البريدي: ${escapeHtml(isMonthly ? (activeBrand.monthlyPostalCode || activeBrand.postalCode || '34625') : (activeBrand.postalCode || '34625'))}</div>
+                      <div>هاتف الاستقبال: ${escapeHtml(isMonthly ? (activeBrand.monthlyPhone || activeBrand.phone || '0560631783') : (activeBrand.phone || '0560631783'))}</div>
                       ${isMonthly
-                        ? (activeBrand.crNumber ? `<div>الرقم الموحد: ${escapeHtml(activeBrand.crNumber)}</div>` : '<div>الرقم الموحد: 7038955915</div>')
+                        ? ((activeBrand.monthlyCrNumber || activeBrand.crNumber) ? `<div>الرقم الموحد: ${escapeHtml(activeBrand.monthlyCrNumber || activeBrand.crNumber)}</div>` : '<div>الرقم الموحد: 7038955915</div>') + (activeBrand.monthlyVatNumber ? `<div>الرقم الضريبي: ${escapeHtml(activeBrand.monthlyVatNumber)}</div>` : '')
                         : (activeBrand.vatNumber ? `<div>الرقم الضريبي: ${escapeHtml(activeBrand.vatNumber)}</div>` : '')}
                     </div>
                   </div>
@@ -2573,8 +2579,9 @@
         showToast('يرجى إدخال اسم النزيل.', 'error');
         return;
       }
-      if (guestPhone && !/^05\d{8}$/.test(guestPhone)) {
-        showToast('رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).', 'error');
+      const cleanGuestPhone = guestPhone ? String(guestPhone).trim().replace(/[\s\-\(\)]/g, '') : '';
+      if (cleanGuestPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(cleanGuestPhone)) {
+        showToast('رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).', 'error');
         return;
       }
       if (guestIdNumber && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(guestIdNumber)) {
@@ -3202,16 +3209,13 @@
     let cleaned = String(rawPhone).replace(/[^\d+]/g, '');
     if (cleaned.startsWith('+')) {
       cleaned = cleaned.substring(1);
-    }
-    if (cleaned.startsWith('00966')) {
-      cleaned = '966' + cleaned.substring(5);
-    } else if (cleaned.startsWith('966')) {
-      // Already formatted with 966
-    } else if (cleaned.startsWith('0')) {
-      // e.g., '0501234567' -> '966501234567'
+    } else if (cleaned.startsWith('00')) {
+      cleaned = cleaned.substring(2);
+    } else if (cleaned.startsWith('05') && cleaned.length === 10) {
+      // Local Saudi format 05XXXXXXXX -> 9665XXXXXXXX
       cleaned = '966' + cleaned.substring(1);
     } else if (cleaned.startsWith('5') && cleaned.length === 9) {
-      // e.g., '501234567' -> '966501234567'
+      // Saudi 9-digit format 5XXXXXXXX -> 9665XXXXXXXX
       cleaned = '966' + cleaned;
     }
     return cleaned;

@@ -973,7 +973,7 @@
                   </div>
                   <div class="form-group">
                     <label for="new-customer-phone">رقم الجوال</label>
-                    <input type="tel" id="new-customer-phone" class="form-control" placeholder="مثال: 0551234567">
+                    <input type="tel" id="new-customer-phone" class="form-control" placeholder="05xxxxxxxx أو +968...">
                   </div>
                   <div class="form-group">
                     <label for="new-customer-id">رقم الهوية الوطنية / الإقامة / جواز السفر</label>
@@ -1220,11 +1220,35 @@
                     <div style="font-size: 0.88rem; font-weight: 800; color: #7c2d12; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
                       <span>📜</span> بيانات السند الشهري وعقد الإيجار (Monthly Contract & Company Profile)
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                       <div class="form-group">
-                        <label for="brand-edit-company-ar" style="font-size: 0.8rem; font-weight: 700;">الاسم التجاري للمؤسسة المشغلة في العقد الشهري</label>
+                        <label for="brand-edit-company-ar" style="font-size: 0.8rem; font-weight: 700;">الاسم التجاري للمؤسسة المشغلة (بالعربي)</label>
                         <input type="text" id="brand-edit-company-ar" class="form-control" placeholder="مثال: مؤسسة مكتب شمس المنازل للخدمات العقارية" required>
-                        <small style="color: #64748b; font-size: 0.72rem; margin-top: 2px;">هذا الاسم هو الذي يظهر في ترويسة سندات الإقامة وعقود الإيجار الشهرية.</small>
+                        <small style="color: #64748b; font-size: 0.72rem; margin-top: 2px;">يظهر في ترويسة سندات الإقامة وعقود الإيجار الشهرية.</small>
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-monthly-name-en" style="font-size: 0.8rem; font-weight: 700;">اسم المؤسسة / المنشأة بالإنجليزي</label>
+                        <input type="text" id="brand-edit-monthly-name-en" class="form-control" placeholder="مثال: Shams Al-Manazil Real Estate" dir="ltr">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-monthly-cr" style="font-size: 0.8rem; font-weight: 700;">الرقم الموحد / السجل التجاري للعقد الشهري</label>
+                        <input type="text" id="brand-edit-monthly-cr" class="form-control" placeholder="مثال: 7038955915" dir="ltr">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-monthly-vat" style="font-size: 0.8rem; font-weight: 700;">الرقم الضريبي للعقد الشهري (اختياري)</label>
+                        <input type="text" id="brand-edit-monthly-vat" class="form-control" placeholder="310XXXXXXXXXXXX" dir="ltr">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-monthly-phone" style="font-size: 0.8rem; font-weight: 700;">هاتف التواصل / الاستقبال</label>
+                        <input type="text" id="brand-edit-monthly-phone" class="form-control" placeholder="05XXXXXXXX أو +968..." dir="ltr">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-monthly-address" style="font-size: 0.8rem; font-weight: 700;">العنوان والمدينة</label>
+                        <input type="text" id="brand-edit-monthly-address" class="form-control" placeholder="المدينة - الحي">
+                      </div>
+                      <div class="form-group">
+                        <label for="brand-edit-monthly-postal" style="font-size: 0.8rem; font-weight: 700;">الرمز البريدي</label>
+                        <input type="text" id="brand-edit-monthly-postal" class="form-control" placeholder="34625" dir="ltr">
                       </div>
                     </div>
                   </div>
@@ -1558,7 +1582,7 @@
           <div class="form-row">
             <div class="form-group">
               <label for="guest-phone">رقم الجوال <span class="field-required" aria-hidden="true">*</span></label>
-              <input type="tel" id="guest-phone" required placeholder="05xxxxxxxx" class="form-control form-input">
+              <input type="tel" id="guest-phone" required placeholder="05xxxxxxxx أو +968..." class="form-control form-input">
               <p id="guest-phone-error" class="hidden text-rose-500 text-xs font-bold mt-1.5" style="display:none; color:#f43f5e; font-size:0.76rem; font-weight:700; margin-top:4px;"></p>
             </div>
             <div class="form-group">
@@ -1976,7 +2000,7 @@
         <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-group" style="margin-bottom: 0;">
             <label for="edit-inv-guest-phone" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">رقم الجوال <span class="field-required" aria-hidden="true">*</span></label>
-            <input type="tel" id="edit-inv-guest-phone" required class="form-control" placeholder="05xxxxxxxx">
+            <input type="tel" id="edit-inv-guest-phone" required class="form-control" placeholder="05xxxxxxxx أو +968...">
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label for="edit-inv-guest-id" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">الهوية / الجواز</label>
@@ -2079,7 +2103,7 @@
 
         <div class="form-group" style="margin-bottom: 14px;">
           <label for="edit-guest-phone" style="display: block; font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: #334155;">رقم الجوال (05xxxxxxxx)</label>
-          <input type="tel" id="edit-guest-phone" class="form-control" placeholder="0501234567" style="font-family: monospace; font-size: 0.9rem;">
+          <input type="tel" id="edit-guest-phone" class="form-control" placeholder="0501234567 أو +968..." style="font-family: monospace; font-size: 0.9rem;">
         </div>
 
         <div class="form-group" style="margin-bottom: 14px;">
@@ -2232,7 +2256,7 @@
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="comp-form-phone" style="display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #334155;">رقم الجوال</label>
-                <input type="tel" id="comp-form-phone" class="form-control" placeholder="05xxxxxxxx">
+                <input type="tel" id="comp-form-phone" class="form-control" placeholder="05xxxxxxxx أو +968...">
               </div>
             </div>
 

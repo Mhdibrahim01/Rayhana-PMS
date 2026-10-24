@@ -20,7 +20,13 @@
       "seal": "assets/brands/hotel_1/seal.svg",
       "signature": "assets/brands/hotel_1/signature.svg",
       "showSeal": true,
-      "showSignature": true
+      "showSignature": true,
+      "monthlyNameEn": "Shams Al-Manazil Real Estate Services",
+      "monthlyCrNumber": "7038955915",
+      "monthlyVatNumber": "",
+      "monthlyPhone": "0560631783",
+      "monthlyAddress": "الخبر - الثقبة",
+      "monthlyPostalCode": "34625"
     },
     "general": {
       "id": "general",
@@ -40,7 +46,13 @@
       "seal": "assets/brands/general/seal.svg",
       "signature": "assets/brands/general/signature.svg",
       "showSeal": true,
-      "showSignature": true
+      "showSignature": true,
+      "monthlyNameEn": "Property & Real Estate Services",
+      "monthlyCrNumber": "7000000000",
+      "monthlyVatNumber": "",
+      "monthlyPhone": "0500000000",
+      "monthlyAddress": "المملكة العربية السعودية",
+      "monthlyPostalCode": "10000"
     }
   }
 }

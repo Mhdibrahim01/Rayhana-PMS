@@ -1106,16 +1106,17 @@
       }
     }
 
-    // 2. Phone Number: Must start with 05 and be exactly 10 digits (Inline error)
-    if (!guestPhone) {
+    // 2. Phone Number: Local or International (7 to 15 digits)
+    const cleanGuestPhone = guestPhone ? String(guestPhone).trim().replace(/[\s\-\(\)]/g, '') : '';
+    if (!cleanGuestPhone) {
       setFieldError(guestPhoneInput, guestPhoneError, 'يرجى إدخال رقم جوال النزيل.');
       if (guestPhoneInput) guestPhoneInput.focus();
       return { valid: false, inline: true, error: 'يرجى إدخال رقم جوال النزيل.' };
     }
-    if (!/^05\d{8}$/.test(guestPhone)) {
-      setFieldError(guestPhoneInput, guestPhoneError, 'رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).');
+    if (!/^(?:\+|00)?[0-9]{7,15}$/.test(cleanGuestPhone)) {
+      setFieldError(guestPhoneInput, guestPhoneError, 'رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).');
       if (guestPhoneInput) guestPhoneInput.focus();
-      return { valid: false, inline: true, error: 'رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.' };
+      return { valid: false, inline: true, error: 'رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً.' };
     }
 
     // 3. National ID (10 digits) OR Passport (6-9 alphanumeric characters) (Inline error)
@@ -1175,9 +1176,10 @@
       if (newCustomerName) { newCustomerName.focus(); highlightField(newCustomerName); }
       return { valid: false, error: 'يرجى إدخال اسم العميل / النزيل.' };
     }
-    if (phone && !/^05\d{8}$/.test(phone)) {
+    const cleanPhone = phone ? String(phone).trim().replace(/[\s\-\(\)]/g, '') : '';
+    if (cleanPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(cleanPhone)) {
       if (newCustomerPhone) { newCustomerPhone.focus(); highlightField(newCustomerPhone); }
-      return { valid: false, error: 'رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام بالضبط (مثال: 0501234567).' };
+      return { valid: false, error: 'رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).' };
     }
     if (id_number && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(id_number)) {
       if (newCustomerId) { newCustomerId.focus(); highlightField(newCustomerId); }

@@ -153,8 +153,9 @@ function addCustomer({ name, phone = '', id_number = '', nationality = 'سعود
   const cleanId = (id_number || '').trim();
   const cleanNationality = (nationality || 'سعودي').trim() || 'سعودي';
 
-  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
-    throw new Error('رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).');
+  const normCleanPhone = cleanPhone ? cleanPhone.replace(/[\s\-\(\)]/g, '') : '';
+  if (normCleanPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(normCleanPhone)) {
+    throw new Error('رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).');
   }
   if (cleanId && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(cleanId)) {
     throw new Error('رقم الهوية الوطنية أو الإقامة (10 أرقام) أو جواز السفر (6 إلى 9 خانات) غير صحيح.');
@@ -228,8 +229,9 @@ function updateGuest(guestId, { name, phone = '', id_number = '', nationality = 
     : (existingGuest.nationality || 'سعودي');
 
   // Validate phone format (Saudi format: 05xxxxxxxx, 10 digits) - reuses exact rule from addCustomer / createReservation
-  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
-    throw new Error('رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).');
+  const normCleanPhone = cleanPhone ? cleanPhone.replace(/[\s\-\(\)]/g, '') : '';
+  if (normCleanPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(normCleanPhone)) {
+    throw new Error('رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).');
   }
 
   // Validate ID format (National ID / Iqama 10 digits, or Passport 6-9 alphanumeric) - reuses exact rule from addCustomer / createReservation

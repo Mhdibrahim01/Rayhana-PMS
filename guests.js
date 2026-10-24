@@ -18,9 +18,10 @@ module.exports = function registerGuestsIpc(ipcMain, { db, session }) {
       return { valid: false, error: 'اسم النزيل مطلوب ولا يمكن تركه فارغاً.' };
     }
 
-    // 2. Phone: Saudi format 05XXXXXXXX
-    if (phone && !/^05\d{8}$/.test(phone)) {
-      return { valid: false, error: 'رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).' };
+    // 2. Phone: Local or International (7 to 15 digits)
+    const cleanPhone = phone ? String(phone).trim().replace(/[\s\-\(\)]/g, '') : '';
+    if (cleanPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(cleanPhone)) {
+      return { valid: false, error: 'رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).' };
     }
 
     // 3. National ID (10 digits) OR Passport (6-9 alphanumeric characters)

@@ -522,9 +522,9 @@ function createReservation({
     throw new Error('يرجى تحديد الغرفة المراد حجزها.');
   }
 
-  const cleanPhone = (guestPhone || '').trim();
-  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
-    throw new Error('رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0501234567).');
+  const cleanPhone = (guestPhone || '').trim().replace(/[\s\-\(\)]/g, '');
+  if (cleanPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(cleanPhone)) {
+    throw new Error('رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).');
   }
   const cleanId = (guestIdNumber || '').trim();
   if (cleanId && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(cleanId)) {
@@ -3179,9 +3179,9 @@ function updateReservationReceipt({
     throw new Error('المبلغ المدفوع لا يمكن أن يكون سالباً.');
   }
 
-  const cleanPhone = (guestPhone || '').trim();
-  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
-    throw new Error('رقم الجوال غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.');
+  const cleanPhone = (guestPhone || '').trim().replace(/[\s\-\(\)]/g, '');
+  if (cleanPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(cleanPhone)) {
+    throw new Error('رقم الجوال غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).');
   }
 
   const cleanId = (guestIdNumber || '').trim();
@@ -4003,8 +4003,9 @@ function addReservationCompanion(arg1, arg2) {
   const cleanRel = (relationship || '').trim();
   const cleanPhone = (phone || '').trim();
 
-  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
-    throw new Error('رقم جوال المرافق غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.');
+  const normCompPhone = cleanPhone ? cleanPhone.replace(/[\s\-\(\)]/g, '') : '';
+  if (normCompPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(normCompPhone)) {
+    throw new Error('رقم جوال المرافق غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).');
   }
   if (cleanId && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(cleanId)) {
     throw new Error('رقم هوية المرافق (10 أرقام) أو جواز السفر (6 إلى 9 خانات) غير صحيح.');
@@ -4048,8 +4049,9 @@ function updateReservationCompanion(arg1, arg2) {
   const cleanRel = (relationship || '').trim();
   const cleanPhone = (phone || '').trim();
 
-  if (cleanPhone && !/^05\d{8}$/.test(cleanPhone)) {
-    throw new Error('رقم جوال المرافق غير صحيح: يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.');
+  const normCompPhone = cleanPhone ? cleanPhone.replace(/[\s\-\(\)]/g, '') : '';
+  if (normCompPhone && !/^(?:\+|00)?[0-9]{7,15}$/.test(normCompPhone)) {
+    throw new Error('رقم جوال المرافق غير صحيح: يرجى إدخال رقم هاتف صحيح من 7 إلى 15 رقماً (محلي أو دولي).');
   }
   if (cleanId && !/^(?:\d{10}|[a-zA-Z0-9]{6,9})$/i.test(cleanId)) {
     throw new Error('رقم هوية المرافق (10 أرقام) أو جواز السفر (6 إلى 9 خانات) غير صحيح.');
