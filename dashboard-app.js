@@ -444,6 +444,178 @@ window.DashboardApp = {
   App.Helpers.formatArabicDateTime = formatArabicDateTime;
   App.Helpers.parseStoredTimestamp = parseStoredTimestamp;
   App.Helpers.getReservationFinancials = getReservationFinancials;
+
+  const ARABIC_INDIC_AND_PERSIAN_DIGITS = {
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+    '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
+  };
+
+  function normalizeSearchText(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/[٠-٩۰-۹]/g, d => ARABIC_INDIC_AND_PERSIAN_DIGITS[d] || d)
+      .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '')
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/[ىئ]/g, 'ي')
+      .toLowerCase()
+      .trim();
+  }
+
+  function filterShiftAuditReport(reportData, options) {
+    if (!reportData) return null;
+    const query = (options?.query || '').trim();
+    const field = options?.field || 'all';
+    const isSearchActive = Boolean(query);
+    const normQuery = normalizeSearchText(query);
+
+    const allPayments = reportData.payments || [];
+    const allTxs = reportData.transactions || [];
+    const allTransfers = reportData.transfers || [];
+    const allDeposits = reportData.depositMovements || [];
+
+    if (!isSearchActive || !normQuery) {
+      return {
+        isSearchActive: false,
+        query: '',
+        field,
+        payments: allPayments,
+        transactions: allTxs,
+        transfers: allTransfers,
+        depositMovements: allDeposits,
+        filteredPaymentsTotal: roundMoney(allPayments.reduce((s, p) => s + Number(p.amount || 0), 0)),
+        totalMatches: allPayments.length + allTxs.length + allTransfers.length + allDeposits.length,
+        matchers: {
+          matchName: () => false,
+          matchRoom: () => false,
+          matchReceipt: () => false
+        }
+      };
+    }
+
+    const paymentsByResId = new Map();
+    for (const p of allPayments) {
+      const rid = Number(p.reservation_id);
+      if (!paymentsByResId.has(rid)) paymentsByResId.set(rid, []);
+      paymentsByResId.get(rid).push(p);
+    }
+
+    function matchName(name) {
+      if (!name) return false;
+      const normName = normalizeSearchText(name);
+      if (!normName) return false;
+      if (normName.includes(normQuery)) return true;
+      const noSpaceName = normName.replace(/\s+/g, '');
+      const noSpaceQ = normQuery.replace(/\s+/g, '');
+      return noSpaceQ.length > 0 && noSpaceName.includes(noSpaceQ);
+    }
+
+    function matchRoom(room) {
+      if (!room) return false;
+      const cleanQ = normQuery.replace(/^(?:غرفه|غرفة)\s*/, '').trim();
+      const normRoom = normalizeSearchText(room);
+      if (!normRoom) return false;
+      if (cleanQ) {
+        if (normRoom === cleanQ || normRoom.includes(cleanQ) || cleanQ.includes(normRoom)) return true;
+      }
+      return normRoom.includes(normQuery);
+    }
+
+    function matchReceipt(receiptNum, altId, resId) {
+      const cleanQ = normQuery.replace(/^(?:سند|رقم|ايصال|إيصال|فاتورة|فاتوره|#)\s*/, '').trim();
+      if (!cleanQ) return false;
+
+      const normRec = normalizeSearchText(receiptNum);
+      const normAltId = normalizeSearchText(altId);
+      const normResId = normalizeSearchText(resId);
+
+      if (normRec && (normRec.includes(cleanQ) || cleanQ.includes(normRec))) return true;
+      if (normAltId && (normAltId === cleanQ || normAltId.includes(cleanQ))) return true;
+      if (normResId && (normResId === cleanQ || normResId.includes(cleanQ))) return true;
+
+      if (resId && paymentsByResId.has(Number(resId))) {
+        for (const p of paymentsByResId.get(Number(resId))) {
+          const pRec = normalizeSearchText(p.receipt_number);
+          const pId = normalizeSearchText(p.id);
+          if (pRec && (pRec.includes(cleanQ) || cleanQ.includes(pRec))) return true;
+          if (pId && (pId === cleanQ || pId.includes(cleanQ))) return true;
+        }
+      }
+      return false;
+    }
+
+    function testPayment(p) {
+      const nMatch = matchName(p.guest_name);
+      const rMatch = matchRoom(p.room_number);
+      const recMatch = matchReceipt(p.receipt_number, p.id, p.reservation_id);
+
+      if (field === 'name') return nMatch;
+      if (field === 'room') return rMatch;
+      if (field === 'receipt') return recMatch;
+      return nMatch || rMatch || recMatch;
+    }
+
+    function testReservation(t) {
+      const nMatch = matchName(t.guest_name);
+      const rMatch = matchRoom(t.room_number);
+      const recMatch = matchReceipt('', t.id, t.id);
+
+      if (field === 'name') return nMatch;
+      if (field === 'room') return rMatch;
+      if (field === 'receipt') return recMatch;
+      return nMatch || rMatch || recMatch;
+    }
+
+    function testTransfer(t) {
+      const nMatch = matchName(t.guest_name);
+      const rMatch = matchRoom(t.from_room_number) || matchRoom(t.to_room_number);
+      const recMatch = matchReceipt('', t.reservation_id, t.reservation_id);
+
+      if (field === 'name') return nMatch;
+      if (field === 'room') return rMatch;
+      if (field === 'receipt') return recMatch;
+      return nMatch || rMatch || recMatch;
+    }
+
+    function testDeposit(d) {
+      const nMatch = matchName(d.guest_name);
+      const rMatch = matchRoom(d.room_number);
+      const recMatch = matchReceipt('', d.id, d.reservation_id);
+
+      if (field === 'name') return nMatch;
+      if (field === 'room') return rMatch;
+      if (field === 'receipt') return recMatch;
+      return nMatch || rMatch || recMatch;
+    }
+
+    const filteredPayments = allPayments.filter(testPayment);
+    const filteredTxs = allTxs.filter(testReservation);
+    const filteredTransfers = allTransfers.filter(testTransfer);
+    const filteredDeposits = allDeposits.filter(testDeposit);
+
+    const filteredPaymentsTotal = roundMoney(filteredPayments.reduce((s, p) => s + Number(p.amount || 0), 0));
+    const totalMatches = filteredPayments.length + filteredTxs.length + filteredTransfers.length + filteredDeposits.length;
+
+    return {
+      isSearchActive: true,
+      query,
+      field,
+      payments: filteredPayments,
+      transactions: filteredTxs,
+      transfers: filteredTransfers,
+      depositMovements: filteredDeposits,
+      filteredPaymentsTotal,
+      totalMatches,
+      matchers: {
+        matchName,
+        matchRoom,
+        matchReceipt
+      }
+    };
+  }
+
+  App.Helpers.normalizeSearchText = normalizeSearchText;
+  App.Helpers.filterShiftAuditReport = filterShiftAuditReport;
   function getActiveBrand() {
     return App.State.branding || {
       id: 'hotel_1',

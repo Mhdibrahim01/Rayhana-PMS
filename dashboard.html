@@ -2552,24 +2552,24 @@
   </div>
 
   <!-- Shift Audit & Night Closing Modal (Feature 5) -->
-  <div id="shift-audit-modal" class="modal-backdrop modal-layout-backdrop" dir="rtl" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); z-index: 100000; align-items: center; justify-content: center; overflow: hidden; padding: 20px;">
-    <div class="modal-layout" style="background: white; border-radius: 16px; max-width: 1120px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); overflow: hidden; margin: auto;">
+  <div id="shift-audit-modal" class="modal-backdrop modal-layout-backdrop" dir="rtl" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); z-index: 100000; align-items: center; justify-content: center; overflow: hidden; padding: 16px;">
+    <div class="modal-layout audit-modal" style="background: #f1f5f9; border-radius: 16px; max-width: 1240px; width: 96vw; height: 94vh; max-height: 94vh; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.45); overflow: hidden; margin: auto; display: flex; flex-direction: column;">
       <!-- Action Toolbar (No-Print) -->
-      <div class="no-print modal-layout__header" style="background: #0f172a; color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;">
+      <div class="modal-top-bar no-print" style="background: #ffffff; color: #0f172a; padding: 12px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 10px;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
             <line x1="16" y1="2" x2="16" y2="6"></line>
             <line x1="8" y1="2" x2="8" y2="6"></line>
             <line x1="3" y1="10" x2="21" y2="10"></line>
           </svg>
-          <span style="font-weight: 800; font-size: 1.05rem;">تقرير إقفال الوردية والموازنة المالية (Night Audit)</span>
+          <span style="font-weight: 800; font-size: 1.05rem; color: #0f172a;">تقرير إقفال الوردية والموازنة المالية (Night Audit)</span>
         </div>
-        <div class="shift-audit-actions" style="display: flex; gap: 8px;">
-          <button id="btn-run-night-audit" data-role-required="Admin" type="button" class="btn btn-sm" style="background: #b45309; color: white; font-weight: 800; padding: 6px 11px; border: 1px solid #f59e0b;" title="إقفال تاريخ العمل الحالي والانتقال إلى اليوم التالي">
+        <div class="shift-audit-actions" style="display: flex; gap: 8px; align-items: center;">
+          <button id="btn-run-night-audit" data-role-required="Admin" type="button" class="btn btn-sm btn-action" style="background: #b45309; color: white; font-weight: 800; padding: 7px 14px; border: none; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" title="إقفال تاريخ العمل الحالي والانتقال إلى اليوم التالي">
             <span>إقفال اليوم الفندقي</span>
           </button>
-          <button id="btn-print-shift-audit" type="button" class="btn btn-sm" style="background: #05963d; color: white; font-weight: 700; padding: 6px 11px;">
+          <button id="btn-print-shift-audit" type="button" class="btn btn-sm btn-action" style="background: #16a34a; color: white; font-weight: 700; padding: 7px 14px; border: none; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6 9 6 2 18 2 18 9"></polyline>
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
@@ -2577,28 +2577,28 @@
             </svg>
             <span>طباعة فورية</span>
           </button>
-          <button id="btn-export-pdf-shift-audit" type="button" class="btn btn-sm" style="background: #143d24; color: white; font-weight: 700; padding: 6px 11px;">
+          <button id="btn-export-pdf-shift-audit" type="button" class="btn btn-sm btn-action" style="background: #14532d; color: white; font-weight: 700; padding: 7px 14px; border: none; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
             </svg>
             <span>حفظ PDF</span>
           </button>
-          <button id="btn-preview-window-shift-audit" type="button" class="btn btn-sm" style="background: #334155; color: white; font-weight: 700; padding: 6px 11px; border: 1px solid #475569;">
+          <button id="btn-preview-window-shift-audit" type="button" class="btn btn-sm btn-action" style="background: #334155; color: white; font-weight: 700; padding: 7px 14px; border: 1px solid #475569; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
             <span>معاينة مستقلة</span>
           </button>
-          <button id="btn-close-shift-audit" type="button" class="btn btn-sm" style="background: rgba(255,255,255,0.15); color: white; border: none; font-size: 0.95rem; padding: 6px 11px;">
+          <button id="btn-close-shift-audit" type="button" class="btn btn-sm" style="background: #e2e8f0; color: #334155; border: none; font-size: 0.95rem; font-weight: 700; padding: 7px 14px; border-radius: 9px; cursor: pointer;">
             إغلاق &times;
           </button>
         </div>
       </div>
 
-      <!-- Printable Audit Sheet -->
-      <div id="shift-audit-content" style="padding: 32px 36px; background: white; color: #0f172a; direction: rtl; text-align: right;">
+      <!-- Scrollable Printable Audit Sheet Container (flex: 1) -->
+      <div id="shift-audit-content" class="modal-body-scroll" style="flex: 1; overflow-y: auto; padding: 18px 22px; background: #f1f5f9; color: #0f172a; direction: rtl; text-align: right;">
         <!-- Filled dynamically by JavaScript -->
       </div>
     </div>
@@ -2843,6 +2843,7 @@
             </li>
             <li><strong>مبيعات الشبكة (مدى / بطاقات ائتمانية):</strong> تُطابق مع شريط جهاز نقاط البيع البنكي (POS Terminal).</li>
             <li><strong>جدول حركة الحجوزات الفعلية:</strong> يقتصر فقط على من دخل اليوم، من غادر اليوم، ومن سدد دفعات اليوم، مع استبعاد النزلاء المقيمين من أيام سابقة الذين لم تطرأ عليهم أي حركة مالية لضمان وضوح التقرير.</li>
+            <li><strong>البحث والتصفية الفورية بالتقرير:</strong> يتيح شريط البحث تصفية الجداول المالية وحركة الحجوزات ونقل الغرف والتأمينات فورياً حسب <strong>اسم النزيل</strong>، <strong>رقم الغرفة</strong>، أو <strong>رقم السند/الحجز</strong> (أو بالكل معاً)، مع تمييز النتائج المطابقة بلون مميز وعرض ملخص مالي للمقبوضات المفلترة، كما تنعكس التصفية تلقائياً على الطباعة وملفات PDF المصدرة.</li>
           </ul>
         </section>
 
