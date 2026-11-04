@@ -415,13 +415,33 @@ function getReservationById(reservationId) {
 }
 
 /**
- * Generate unique, sequential receipt number: REC-YYYY-XXXXX-XXXX
+ * Generate unique, sequential sub-receipt number linked to the reservation: REC-YYYY-RRRR-SS
+ * Where:
+ * - YYYY: current year (e.g. 2026)
+ * - RRRR: reservation id padded to 4 digits (e.g. 0100 for reservation #100)
+ * - SS: sequential sub-payment index for this specific reservation (01 for first payment, 02 for second payment, etc.)
  */
 function generateReceiptNumber(reservationId) {
   const year = new Date().getFullYear();
+  const safeResId = parseInt(reservationId, 10) || 0;
+  if (safeResId > 0) {
+    const countRow = queryOne("SELECT COUNT(*) AS count FROM payments WHERE reservation_id = ?", [safeResId]);
+    let subIndex = (countRow?.count || 0) + 1;
+    let receiptNo = `REC-${year}-${String(safeResId).padStart(4, '0')}-${String(subIndex).padStart(2, '0')}`;
+    while (queryOne("SELECT id FROM payments WHERE receipt_number = ?", [receiptNo])) {
+      subIndex++;
+      receiptNo = `REC-${year}-${String(safeResId).padStart(4, '0')}-${String(subIndex).padStart(2, '0')}`;
+    }
+    return receiptNo;
+  }
   const countRow = queryOne("SELECT COUNT(*) AS count FROM payments");
-  const count = (countRow?.count || 0) + 1;
-  return `REC-${year}-${String(reservationId).padStart(4, '0')}-${String(count).padStart(4, '0')}`;
+  let count = (countRow?.count || 0) + 1;
+  let receiptNo = `REC-${year}-0000-${String(count).padStart(4, '0')}`;
+  while (queryOne("SELECT id FROM payments WHERE receipt_number = ?", [receiptNo])) {
+    count++;
+    receiptNo = `REC-${year}-0000-${String(count).padStart(4, '0')}`;
+  }
+  return receiptNo;
 }
 
 function createReservation({
